@@ -1,0 +1,56 @@
+{
+  "structure": "2row",
+  "rows": [
+    {
+      "id": "utility",
+      "height": 40,
+      "background": "#FFFFFF",
+      "borderBottom": true,
+      "items": ["utility-menu"]
+    },
+    {
+      "id": "main",
+      "height": 64,
+      "background": "#FFFFFF",
+      "borderBottom": true,
+      "items": ["logo", "search-bar", "promotion-badge", "navigation", "right-menu"]
+    }
+  ],
+  "logo": {
+    "src": "logo-primary.png",
+    "width": 140,
+    "height": 32,
+    "alt": "{tenant_name}"
+  },
+  "searchBar": {
+    "enabled": true,
+ "placeholder": "to where 떠나세요?",
+    "width": "300px",
+    "style": "pill"
+  },
+  "promotionBadge": {
+    "enabled": true,
+ "text": "New가입 5% Discount",
+    "backgroundColor": "#6366F1",
+    "textColor": "#FFFFFF"
+  },
+  "navigation": {
+    "position": "center",
+    "items": [
+      { "label": "Aviation", "href": "/flights", "active": true },
+ { "label": "숙소", "href": "/hotels" },
+ { "label": "투어&Ticket", "href": "/tours" },
+ { "label": "패키지", "href": "/packages", "badge": "NEW" }
+    ]
+  },
+  "utilityMenu": {
+ "items": ["고객센터", "회KRW가입", "Log인"],
+    "separator": "|"
+  },
+  "rightMenu": {
+    "items": [
+ { "label": "마이Page", "href": "/mypage" },
+ { "label": "내 Booking", "href": "/bookings" }
+    ]
+  }
+}

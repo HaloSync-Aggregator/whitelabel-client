@@ -1,0 +1,1336 @@
+/**
+ * @template booking-page
+ * @version 4.1.0
+ * @description Passenger information input page before OrderCreate step.
+ * Supports Seat Selection, Ancillary Service Selection, and Payment Options.
+ *
+ * ============================================================
+ * Checklist
+ * ============================================================
+ * [x] Load bookingData from sessionStorage (saved from search page)
+ * [x] Redirect to home if bookingData is absent
+ * [x] Dynamically create PassengerForm based on paxList
+ * [x] createBooking() call includes transactionId (Required!)
+ * [x] Seat Selection Feature (SeatSelector Integration)
+ * [x] Ancillary Service Selection Feature (ServiceSelector Integration)
+ * [x] 3 booking options: hold / cash / card
+ * [x] Card info input form when card is selected
+ * [x] On success: navigate to /booking/:orderId
+ *
+ * CRITICAL:
+ * - transactionId from bookingData must be passed through to createBooking()!
+ * - identityDoc must include issuingCountryCode!
+ * - contactInfoList phone must include label: 'Mobile'!
+ * - Do NOT include pointOfSale in OrderCreate request!
+ *
+ * ============================================================
+ * Ancillary Service Implementation
+ * ============================================================
+ *
+ * 1. Seat Selection (WF_PB_SEAT, WF_PB_SEAT_REPRICE)
+ *    - SeatSelector Modal Integration
+ *    - seat-availability API Call
+ *    - CARRIERS_SEAT_REPRICE (AF, KL, TR): OfferPrice Re-Call Required
+ *
+ * 2. Ancillary Service Selection (WF_PB_SERVICE)
+ *    - ServiceSelector Modal Integration
+ *    - service-list API Call
+ *    - After service selection, re-call OfferPrice to recalculate price
+ *
+ * 3. Orders Array Composition
+ *    - Itinerary and Seat/Service are separate order entries
+ *    - WF_PB_SEAT_REPRICE: Use responseId/offerId from OfferPrice re-call response
+ *
+ * ============================================================
+ * Booking Options (bookingOption) - 4 types supported
+ * ============================================================
+ * | Option | Description                    | paymentList                                          |
+ * |--------|--------------------------------|------------------------------------------------------|
+ * | hold   | Booking only (No payment)      | [] (Empty array)                                     |
+ * | cash   | Cash payment, immediate ticket | [{ cash: { cashPaymentInd: true }, amount }]         |
+ * | card   | Card payment, immediate ticket | [{ card: { cardCode, cardNumber, ... }, amount }]    |
+ * | agt    | Agent Deposit (TR, etc.)       | [{ agentDeposit: { agentDepositId }, amount }]       |
+ *
+ * ============================================================
+ * Required Component Index Files
+ * ============================================================
+ * components/seat/index.ts - SeatSelector, SeatMap, SeatLegend export
+ * components/service/index.ts - ServiceSelector, ServiceCard export
+ *
+ * index.ts files must exist or import errors will occur!
+ * ============================================================
+ */
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { Flight } from '@/components/flight/FlightCard';
+import { PriceBreakdownData } from '@/components/flight/PriceBreakdown';
+import { SeatSelector, Passenger } from '@/components/seat';
+import { SeatAvailabilityData, SelectedSeat, CARRIERS_SEAT_REPRICE } from '@/types/seat';
+import { ServiceSelector } from '@/components/service';
+import { ServiceListData, SelectedService, isServiceSupported } from '@/types/service';
+import { getSeatAvailability, getOfferPrice, getServiceList, createBooking } from '@/lib/api/polarhub-service';
+import { ERROR_MESSAGES } from '@/lib/error-messages';
+
+// Booking data from sessionStorage
+interface BookingData {
+  transactionId: string;
+  responseId: string;
+  offerId: string;
+  owner: string;
+  // offerItems - required for OrderCreate API's orders[].offerItems
+  offerItems: Array<{ offerItemId: string; paxRefId: string[] }>;
+  flight: Flight;
+  priceBreakdown: PriceBreakdownData;
+  paxList: Array<{ paxId: string; ptc: 'ADT' | 'CHD' | 'INF' }>;
+}
+
+// Passenger form data
+interface PassengerForm {
+  paxId: string;
+  ptc: 'ADT' | 'CHD' | 'INF';
+  // Basic info
+  title: string; // Title/Honorific: MR, MRS, MS, MSTR, MISS
+  property: string;
+  givenName: string;
+  birthdate: string;
+  gender: 'MALE' | 'FEMALE' | '';
+  // Contact
+  phone: string;
+  email: string;
+  // Passport (IdentityDoc)
+  passportNumber: string;
+  passportExpiry: string;
+  passportCountry: string;
+  // Nationality
+  citizenship: string;
+  residence: string;
+}
+
+// Payment form data (card Option)
+interface PaymentForm {
+  cardCode: 'VI' | 'MC' | 'AX' | 'JC' | '';
+  cardNumber: string;
+  cardHolder: string;
+  expiry: string;
+  cvv: string;
+}
+
+// Booking option: hold(booking only), cash(cash immediate ticketing), card(card immediate ticketing), agt(agent payment)deposit)
+type BookingOption = 'hold' | 'cash' | 'card' | 'agt';
+
+function BookingContent() {
+  const navigate = useNavigate();
+
+  // Booking data from sessionStorage
+  const [bookingData, setBookingData] = useState<BookingData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Form states
+  const [passengers, setPassengers] = useState<PassengerForm[]>([]);
+  const [bookingOption, setBookingOption] = useState<BookingOption>('hold');
+  const [payment, setPayment] = useState<PaymentForm>({
+    cardCode: '',
+    cardNumber: '',
+    cardHolder: '',
+    expiry: '',
+    cvv: '',
+  });
+
+  // ============================================================
+  // Seat selection (WF_PB_SEAT, WF_PB_SEAT_REPRICE)
+  // ============================================================
+  const [showSeatSelector, setShowSeatSelector] = useState(false);
+  const [seatData, setSeatData] = useState<SeatAvailabilityData | null>(null);
+  const [selectedSeats, setSelectedSeats] = useState<SelectedSeat[]>([]);
+  const [loadingSeat, setLoadingSeat] = useState(false);
+  // Seat Offer Information (used as separate order entry in OrderCreate)
+  const [seatOfferData, setSeatOfferData] = useState<{
+    responseId: string;
+    offerId: string;
+    owner: string;
+    offerItems?: Array<{ offerItemId: string; paxRefId: string[] }>;
+  } | null>(null);
+
+  // ============================================================
+  // Ancillary service selection (WF_PB_SERVICE)
+  // ============================================================
+  const [showServiceSelector, setShowServiceSelector] = useState(false);
+  const [serviceData, setServiceData] = useState<ServiceListData | null>(null);
+  const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
+  const [loadingService, setLoadingService] = useState(false);
+  // Service Offer Information (when OrderCreate Use)
+  const [serviceOfferData, setServiceOfferData] = useState<{
+    responseId: string;
+    offerId: string;
+    owner: string;
+    offerItems?: Array<{ offerItemId: string; paxRefId: string[] }>;
+  } | null>(null);
+
+  // ============================================================
+  // Load bookingData from sessionStorage
+  // ============================================================
+  useEffect(() => {
+    const stored = sessionStorage.getItem('bookingData');
+    if (!stored) {
+      setError(ERROR_MESSAGES.BOOKING_NOT_AVAILABLE);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const data: BookingData = JSON.parse(stored);
+      setBookingData(data);
+
+      // Initialize passenger forms from paxList
+      const initialPassengers: PassengerForm[] = data.paxList.map((pax) => ({
+        paxId: pax.paxId,
+        ptc: pax.ptc,
+        title: '', // Title/Honorific initial value
+        property: '',
+        givenName: '',
+        birthdate: '',
+        gender: '',
+        phone: '',
+        email: '',
+        passportNumber: '',
+        passportExpiry: '',
+        passportCountry: 'KR',
+        citizenship: 'KR',
+        residence: 'KR',
+      }));
+      setPassengers(initialPassengers);
+    } catch {
+      setError(ERROR_MESSAGES.BOOKING_RETRIEVE_FAILED);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Handle passenger input change
+  const handlePassengerChange = (
+    index: number,
+    field: keyof PassengerForm,
+    value: string
+  ) => {
+    setPassengers((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  // Handle payment input change
+  const handlePaymentChange = (field: keyof PaymentForm, value: string) => {
+    setPayment((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // ============================================================
+  // Seat selection handler
+  // ============================================================
+  const handleOpenSeatSelector = async () => {
+    if (!bookingData) return;
+
+    setLoadingSeat(true);
+    try {
+      const data = await getSeatAvailability({
+        transactionId: bookingData.transactionId,
+        offer: {
+          responseId: bookingData.responseId,
+          offerId: bookingData.offerId,
+          owner: bookingData.owner,
+          offerItems: bookingData.offerItems,
+        },
+        paxList: bookingData.paxList,
+      });
+
+      setSeatData(data.seatData);
+      // Seat Offer Information Save
+      if (data.seatData?._apiData) {
+        setSeatOfferData({
+          responseId: data.seatData._apiData.responseId || data.seatData._apiData.offerId,
+          offerId: data.seatData._apiData.offerId,
+          owner: data.seatData._apiData.owner || bookingData.owner,
+        });
+      }
+      setShowSeatSelector(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : ERROR_MESSAGES.SEAT_RETRIEVE_FAILED);
+    } finally {
+      setLoadingSeat(false);
+    }
+  };
+
+  // Seat selection confirm (WF_PB_SEAT_REPRICE processing)
+  const handleSeatConfirm = async (seats: SelectedSeat[]) => {
+    if (!bookingData) return;
+
+    setSelectedSeats(seats);
+    setShowSeatSelector(false);
+
+    // AFKL, TR Carrier Seat after selection OfferPrice Re-Call Required (WF_PB_SEAT_REPRICE)
+    if (seats.length > 0 && CARRIERS_SEAT_REPRICE.includes(bookingData.owner)) {
+      setLoadingSeat(true);
+      try {
+        // Compose seat offerItems
+        const seatOfferItems = seats.map((seat) => {
+          const match = seat.seatNumber.match(/^(\d+)([A-Z]+)$/i);
+          const row = match ? match[1] : seat.seatNumber.replace(/[A-Z]/gi, '');
+          const column = match ? match[2] : seat.seatNumber.replace(/[0-9]/g, '');
+
+          return {
+            offerItemId: seat.offerItemId,
+            paxRefId: [seat.paxId],
+            seatSelection: { column: column.toUpperCase(), row },
+          };
+        });
+
+        // OfferPrice Re-Call (Journey/Itinerary + Seat separate offer entries)
+        const data = await getOfferPrice({
+          transactionId: bookingData.transactionId,
+          offers: [
+            // 1. Journey/Itinerary Offer
+            {
+              responseId: bookingData.responseId,
+              offerId: bookingData.offerId,
+              owner: bookingData.owner,
+              offerItems: bookingData.offerItems,
+            },
+            // 2. Seat Offer
+            {
+              responseId: seatOfferData?.responseId || bookingData.responseId,
+              offerId: seatOfferData?.offerId || bookingData.offerId,
+              owner: seatOfferData?.owner || bookingData.owner,
+              offerItems: seatOfferItems,
+            },
+          ],
+          paxList: bookingData.paxList,
+        });
+
+        // New OfferPrice Responseto seatOfferData Update
+        setSeatOfferData({
+          responseId: data.responseId || bookingData.responseId,
+          offerId: data.offerId || bookingData.offerId,
+          owner: data.owner || bookingData.owner,
+          offerItems: data.offerItems,
+        });
+
+        // Price Information Update
+        if (data.priceBreakdown) {
+          setBookingData((prev) => prev ? { ...prev, priceBreakdown: data.priceBreakdown } : null);
+        }
+
+        alert('Seat Select. Amount Re-Calculate.');
+      } catch (err) {
+        alert(err instanceof Error ? err.message : ERROR_MESSAGES.PAYMENT_RECALC_FAILED);
+        setSelectedSeats([]);
+      } finally {
+        setLoadingSeat(false);
+      }
+    }
+  };
+
+  // ============================================================
+  // Ancillary service selection handler (WF_PB_SERVICE)
+  // ============================================================
+  const handleOpenServiceSelector = async () => {
+    if (!bookingData) return;
+
+    if (!isServiceSupported(bookingData.owner)) {
+      alert(ERROR_MESSAGES.SERVICE_NOT_SUPPORTED(bookingData.owner));
+      return;
+    }
+
+    setLoadingService(true);
+    try {
+      const data = await getServiceList({
+        transactionId: bookingData.transactionId,
+        offer: {
+          responseId: bookingData.responseId,
+          offerId: bookingData.offerId,
+          owner: bookingData.owner,
+          offerItems: bookingData.offerItems,
+        },
+        paxList: bookingData.paxList,
+        currencyCode: bookingData.priceBreakdown.currency || 'KRW',
+      });
+
+      setServiceData(data.serviceData);
+      setShowServiceSelector(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : ERROR_MESSAGES.SERVICE_RETRIEVE_FAILED);
+    } finally {
+      setLoadingService(false);
+    }
+  };
+
+  // Ancillary service selection confirm
+  const handleServiceConfirm = async (services: SelectedService[]) => {
+    if (!bookingData) return;
+
+    setSelectedServices(services);
+    setShowServiceSelector(false);
+
+    // WF_PB_SERVICE: Re-call OfferPrice after service selection
+    if (services.length > 0) {
+      setLoadingService(true);
+      try {
+        const serviceOfferItems = services.map((svc) => ({
+          offerItemId: svc.offerItemId,
+          paxRefId: [svc.paxId],
+          ...(svc.bookingInstructions && { bookingInstructions: svc.bookingInstructions }),
+        }));
+
+        const data = await getOfferPrice({
+          transactionId: bookingData.transactionId,
+          offers: [
+            // 1. Journey/Itinerary Offer
+            {
+              responseId: bookingData.responseId,
+              offerId: bookingData.offerId,
+              owner: bookingData.owner,
+              offerItems: bookingData.offerItems,
+            },
+            // 2. Service Offer
+            {
+              responseId: serviceData?._apiData.responseId || bookingData.responseId,
+              offerId: serviceData?._apiData.offerId || bookingData.offerId,
+              owner: serviceData?._apiData.owner || bookingData.owner,
+              offerItems: serviceOfferItems,
+            },
+          ],
+          paxList: bookingData.paxList,
+        });
+
+        setServiceOfferData({
+          responseId: data.responseId || bookingData.responseId,
+          offerId: data.offerId || bookingData.offerId,
+          owner: data.owner || bookingData.owner,
+          offerItems: data.offerItems,
+        });
+
+        if (data.priceBreakdown) {
+          setBookingData((prev) => prev ? { ...prev, priceBreakdown: data.priceBreakdown } : null);
+        }
+
+        alert('Ancillary service Select. Amount Re-Calculate.');
+      } catch (err) {
+        alert(err instanceof Error ? err.message : ERROR_MESSAGES.PAYMENT_RECALC_FAILED);
+        setSelectedServices([]);
+      } finally {
+        setLoadingService(false);
+      }
+    }
+  };
+
+  // ============================================================
+  // Price Calculate
+  // ============================================================
+  const totalSeatPrice = selectedSeats.reduce((sum, seat) => sum + seat.price, 0);
+  const totalServicePrice = selectedServices.reduce((sum, svc) => sum + svc.price, 0);
+
+  const displayTotalPrice = useMemo(() => {
+    if (!bookingData?.priceBreakdown) return 0;
+    let total = bookingData.priceBreakdown.totalAmount;
+
+    // Service OfferPrice if not yet re-called Service Amount Add
+    if (selectedServices.length > 0 && !serviceOfferData) {
+      total += totalServicePrice;
+    }
+
+    // Seat OfferPrice if not yet re-called Seat Amount Add (CARRIERS_SEAT_REPRICE)
+    const isSeatIncludedInPrice = seatOfferData && CARRIERS_SEAT_REPRICE.includes(bookingData.owner);
+    if (selectedSeats.length > 0 && !isSeatIncludedInPrice) {
+      total += totalSeatPrice;
+    }
+
+    return total;
+  }, [bookingData, selectedServices, selectedSeats, serviceOfferData, seatOfferData, totalServicePrice, totalSeatPrice]);
+
+  // Helper functions
+  const ptcLabel = (ptc: string) => {
+    switch (ptc) {
+      case 'ADT': return 'Adult';
+      case 'CHD': return 'Child';
+      case 'INF': return 'Infant';
+      default: return ptc;
+    }
+  };
+
+  // Title/Honorific options (per passenger type)
+  const getTitleOptions = (ptc: 'ADT' | 'CHD' | 'INF') => {
+    if (ptc === 'INF') {
+      return [
+        { value: 'MSTR', label: 'MSTR (Boy)' },
+        { value: 'MISS', label: 'MISS (Girl)' },
+      ];
+    }
+    if (ptc === 'CHD') {
+      return [
+        { value: 'MSTR', label: 'MSTR (Boy)' },
+        { value: 'MISS', label: 'MISS (Girl)' },
+      ];
+    }
+    // ADT
+    return [
+      { value: 'MR', label: 'MR (Male)' },
+      { value: 'MRS', label: 'MRS (Married Female)' },
+      { value: 'MS', label: 'MS (Unmarried Female)' },
+    ];
+  };
+
+  const formatPrice = (amount: number, currency: string) => {
+    return `${amount.toLocaleString()} ${currency}`;
+  };
+
+  // Passengers for seat selector
+  const seatPassengers: Passenger[] = passengers.map((p, idx) => ({
+    paxId: p.paxId,
+    name: p.property && p.givenName ? `${p.property} ${p.givenName}` : `Passenger ${idx + 1}`,
+    type: p.ptc,
+    typeLabel: ptcLabel(p.ptc),
+  }));
+
+  // Validation
+  const isPassengersValid = passengers.every(
+    (p) => p.title && p.property && p.givenName && p.gender && p.phone && p.email &&
+      p.passportNumber && p.passportExpiry && p.passportCountry
+  );
+
+  const isPaymentValid =
+    bookingOption === 'hold' ||
+    bookingOption === 'agt' ||
+    bookingOption === 'cash' ||
+    (bookingOption === 'card' &&
+      payment.cardCode &&
+      payment.cardNumber.length >= 13 &&
+      payment.cardHolder &&
+      payment.expiry.length === 4 &&
+      payment.cvv.length >= 3);
+
+  const isValid = isPassengersValid && isPaymentValid;
+
+  // ============================================================
+  // Submit booking (OrderCreate)
+  // ============================================================
+  const handleSubmit = async () => {
+    if (!bookingData || !isValid) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      // Build passenger list
+      const paxList = passengers.map((p) => ({
+        paxId: p.paxId,
+        ptc: p.ptc,
+        individual: {
+          nameTitle: p.title, // Title/Honorific (API field name: nameTitle)
+          surname: p.property.toUpperCase(),
+          givenName: [p.givenName.toUpperCase()],
+          birthdate: p.birthdate || undefined,
+          ...(p.gender && { gender: p.gender }),
+        },
+        identityDoc: [{
+          identityDocType: 'PT' as const,
+          identityDocId: p.passportNumber.toUpperCase(),
+          expiryDate: p.passportExpiry,
+          issuingCountryCode: p.passportCountry,
+          citizenshipCountryCode: p.citizenship,
+        }],
+        citizenshipCountryCode: p.citizenship,
+        residenceCountryCode: p.residence,
+        contactInfoRefId: [`CI_${p.paxId}`],
+      }));
+
+      // Build contact info list
+      const contactInfoList = passengers.map((p) => ({
+        contactInfoId: `CI_${p.paxId}`,
+        phone: {
+          label: 'Mobile',
+          countryDialingCode: '82',
+          phoneNumber: p.phone.replace(/-/g, ''),
+        },
+        emailAddress: p.email,
+      }));
+
+      // Build payment list
+      const totalAmountWithExtras = displayTotalPrice;
+      const buildPaymentList = () => {
+        switch (bookingOption) {
+          case 'hold':
+            return [];
+          case 'cash':
+            // TR carrier: when cash selected, process as Agent Deposit
+            if (bookingData.owner === 'TR') {
+              return [{
+                paymentMethod: { agentDeposit: { agentDepositId: 'DEMO001' } }, // Default agent ID
+                amount: {
+                  currencyCode: bookingData.priceBreakdown.currency,
+                  amount: totalAmountWithExtras,
+                },
+              }];
+            }
+            return [{
+              paymentMethod: { cash: { cashPaymentInd: true } },
+              amount: {
+                currencyCode: bookingData.priceBreakdown.currency,
+                amount: totalAmountWithExtras,
+              },
+            }];
+          case 'agt':
+            return [{
+              paymentMethod: { agentDeposit: { agentDepositId: 'DEMO001' } }, // Default agent ID
+              amount: {
+                currencyCode: bookingData.priceBreakdown.currency,
+                amount: totalAmountWithExtras,
+              },
+            }];
+          case 'card':
+            return [{
+              paymentMethod: {
+                card: {
+                  cardCode: payment.cardCode,
+                  cardNumber: payment.cardNumber.replace(/\s/g, ''),
+                  cardHolderName: payment.cardHolder.toUpperCase(),
+                  expiration: payment.expiry,
+                  seriesCode: payment.cvv,
+                },
+              },
+              amount: {
+                currencyCode: bookingData.priceBreakdown.currency,
+                amount: totalAmountWithExtras,
+              },
+            }];
+          default:
+            return [];
+        }
+      };
+
+      // Orders array composition (itinerary/seat/service as separate entries)
+      type OrderOfferItem = {
+        offerItemId: string;
+        paxRefId: string[];
+        seatSelection?: { column: string; row: string };
+      };
+
+      const buildSeatOfferItems = (): OrderOfferItem[] => {
+        return selectedSeats.map((seat) => {
+          const match = seat.seatNumber.match(/^(\d+)([A-Z]+)$/i);
+          const row = match ? match[1] : seat.seatNumber.replace(/[A-Z]/gi, '');
+          const column = match ? match[2] : seat.seatNumber.replace(/[0-9]/g, '');
+
+          return {
+            offerItemId: seat.offerItemId,
+            paxRefId: [seat.paxId],
+            seatSelection: { column: column.toUpperCase(), row },
+          };
+        });
+      };
+
+      let orders: Array<{
+        responseId: string;
+        offerId: string;
+        owner: string;
+        offerItems: OrderOfferItem[];
+      }>;
+
+      // 1. Service Selectif/when
+      if (selectedServices.length > 0 && serviceOfferData) {
+        orders = [{
+          responseId: serviceOfferData.responseId,
+          offerId: serviceOfferData.offerId,
+          owner: serviceOfferData.owner,
+          offerItems: serviceOfferData.offerItems || bookingData.offerItems,
+        }];
+      }
+      // 2. Seat only selected (WF_PB_SEAT_REPRICE: TR, AF, KL)
+      // CRITICAL: Use offerItems from the 2nd OfferPrice response only!
+      // 2nd OfferPrice Journey/Itinerary+Seat Already Integration offerItems Return
+      // bookingData.offerItems (1st OfferPrice) if Use 500 Error occurs!
+      else if (selectedSeats.length > 0 && CARRIERS_SEAT_REPRICE.includes(bookingData.owner) && seatOfferData) {
+        orders = [{
+          responseId: seatOfferData.responseId,
+          offerId: seatOfferData.offerId,
+          owner: seatOfferData.owner,
+          offerItems: seatOfferData.offerItems || bookingData.offerItems, // Use 2nd OfferPrice's merged offerItems!
+        }];
+      }
+      // 3. Seat only selected (WF_PB_SEAT)
+      else if (selectedSeats.length > 0 && seatOfferData) {
+        orders = [
+          {
+            responseId: bookingData.responseId,
+            offerId: bookingData.offerId,
+            owner: bookingData.owner,
+            offerItems: bookingData.offerItems,
+          },
+          {
+            responseId: seatOfferData.responseId,
+            offerId: seatOfferData.offerId,
+            owner: seatOfferData.owner,
+            offerItems: buildSeatOfferItems(),
+          },
+        ];
+      }
+      // 4. Journey/Itinerary
+      else {
+        orders = [{
+          responseId: bookingData.responseId,
+          offerId: bookingData.offerId,
+          owner: bookingData.owner,
+          offerItems: bookingData.offerItems,
+        }];
+      }
+
+      // API Call
+      const data = await createBooking({
+        transactionId: bookingData.transactionId,
+        orders,
+        paxList,
+        contactInfoList,
+        paymentList: buildPaymentList(),
+      });
+
+      if (data.success) {
+        sessionStorage.removeItem('bookingData');
+        alert(`Booking Complete!\nPNR: ${data.pnr}`);
+        navigate(`/booking/${data.orderId}`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : ERROR_MESSAGES.BOOKING_CREATE_FAILED);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <>
+        <Header />
+        <main className="max-w-6xl mx-auto px-4 py-12">
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
+  // Error state
+  if (error && !bookingData) {
+    return (
+      <>
+        <Header />
+        <main className="max-w-4xl mx-auto px-4 py-12">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Booking Information Error</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+            >
+              Back to Search
+            </button>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Header />
+
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">Booking Information Input</h1>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-8">
+          {/* Left: Form */}
+          <div className="flex-1 space-y-6">
+            {/* Passenger forms */}
+            {passengers.map((passenger, index) => (
+              <div key={index} className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Passenger {index + 1} ({ptcLabel(passenger.ptc)})
+                </h3>
+
+                {/* Basic Info */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  {/* Title/Honorific */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Title/Honorific <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={passenger.title}
+                      onChange={(e) => handlePassengerChange(index, 'title', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">Select</option>
+                      {getTitleOptions(passenger.ptc).map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Surname (English) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={passenger.property}
+                      onChange={(e) => handlePassengerChange(index, 'property', e.target.value.toUpperCase())}
+                      placeholder="HONG"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Name (English) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={passenger.givenName}
+                      onChange={(e) => handlePassengerChange(index, 'givenName', e.target.value.toUpperCase())}
+                      placeholder="GILDONG"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Gender <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={passenger.gender}
+                      onChange={(e) => handlePassengerChange(index, 'gender', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">Select</option>
+                      <option value="MALE">Male</option>
+                      <option value="FEMALE">Female</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                    <input
+                      type="date"
+                      value={passenger.birthdate}
+                      onChange={(e) => handlePassengerChange(index, 'birthdate', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                {/* Contact Info */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Contact <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={passenger.phone}
+                      onChange={(e) => handlePassengerChange(index, 'phone', e.target.value.replace(/[^0-9]/g, ''))}
+                      placeholder="01012345678"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={passenger.email}
+                      onChange={(e) => handlePassengerChange(index, 'email', e.target.value)}
+                      placeholder="email@example.com"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                {/* Passport Info */}
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3">Passport Information</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Passport Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={passenger.passportNumber}
+                        onChange={(e) => handlePassengerChange(index, 'passportNumber', e.target.value)}
+                        placeholder="M12345678"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Passport Expiry Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={passenger.passportExpiry}
+                        onChange={(e) => handlePassengerChange(index, 'passportExpiry', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Issuing Country <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={passenger.passportCountry}
+                        onChange={(e) => handlePassengerChange(index, 'passportCountry', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="KR">South Korea</option>
+                        <option value="US">United States</option>
+                        <option value="JP">Japan</option>
+                        <option value="CN">China</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Nationality</label>
+                      <select
+                        value={passenger.citizenship}
+                        onChange={(e) => handlePassengerChange(index, 'citizenship', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="KR">South Korea</option>
+                        <option value="US">United States</option>
+                        <option value="JP">Japan</option>
+                        <option value="CN">China</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* ============================================================ */}
+            {/* Seat selection section */}
+            {/* ============================================================ */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Seat Selection</h3>
+                <span className="text-sm text-gray-500">(Optional)</span>
+              </div>
+
+              {selectedSeats.length > 0 ? (
+                <div className="space-y-3">
+                  {selectedSeats.map((seat, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-sm py-2 border-b border-gray-100">
+                      <span className="text-gray-600">{seat.passengerName} · {seat.flightNumber}</span>
+                      <span className="font-medium">
+                        {seat.seatNumber}
+                        {seat.price > 0 && (
+                          <span className="text-primary ml-2">+{seat.price.toLocaleString()} {seat.currency}</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="font-medium text-gray-900">Total Seat Fee</span>
+                    <span className="font-bold text-primary">
+                      {totalSeatPrice.toLocaleString()} {selectedSeats[0]?.currency || 'KRW'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenSeatSelector}
+                    disabled={loadingSeat}
+                    className="w-full py-2 border border-primary text-primary rounded-lg font-medium hover:bg-primary/5"
+                  >
+                    Change Seat
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-500 mb-4">You can select your preferred seat.</p>
+                  <button
+                    type="button"
+                    onClick={handleOpenSeatSelector}
+                    disabled={loadingSeat}
+                    className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {loadingSeat ? 'Loading seat information...' : 'Select Seat'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ============================================================ */}
+            {/* Ancillary service selection section */}
+            {/* ============================================================ */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Ancillary Services</h3>
+                <span className="text-sm text-gray-500">(Optional)</span>
+              </div>
+
+              {selectedServices.length > 0 ? (
+                <div className="space-y-3">
+                  {selectedServices.map((svc, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-sm py-2 border-b border-gray-100">
+                      <span className="text-gray-600">{svc.passengerName} · {svc.serviceName}</span>
+                      <span className="text-primary">+{svc.price.toLocaleString()} {svc.currency}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center pt-2">
+                    <span className="font-medium text-gray-900">Total Service Fee</span>
+                    <span className="font-bold text-primary">
+                      {totalServicePrice.toLocaleString()} {selectedServices[0]?.currency || 'KRW'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenServiceSelector}
+                    disabled={loadingService}
+                    className="w-full py-2 border border-primary text-primary rounded-lg font-medium hover:bg-primary/5"
+                  >
+                    Change Services
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-500 mb-4">You can purchase additional ancillary services like baggage, meals, etc.</p>
+                  <button
+                    type="button"
+                    onClick={handleOpenServiceSelector}
+                    disabled={loadingService || !isServiceSupported(bookingData?.owner || '')}
+                    className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {loadingService ? 'Loading service information...' : 'Select Ancillary Services'}
+                  </button>
+                  {bookingData && !isServiceSupported(bookingData.owner) && (
+                    <p className="text-sm text-gray-500 mt-2">This carrier does not support ancillary service purchase.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ============================================================ */}
+            {/* Booking option (hold / cash / card) */}
+            {/* ============================================================ */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Booking Option</h3>
+              <div className="space-y-3">
+                <label className="flex items-start gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="bookingOption"
+                    value="hold"
+                    checked={bookingOption === 'hold'}
+                    onChange={() => setBookingOption('hold')}
+                    className="mt-1"
+                  />
+                  <div>
+                    <div className="font-medium text-gray-900">Hold Booking Only</div>
+                    <div className="text-sm text-gray-500">Proceed with booking only, without payment.</div>
+                  </div>
+                </label>
+                <label className="flex items-start gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="bookingOption"
+                    value="cash"
+                    checked={bookingOption === 'cash'}
+                    onChange={() => setBookingOption('cash')}
+                    className="mt-1"
+                  />
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {bookingData?.owner === 'TR' ? 'Agent Deposit - Immediate Ticketing' : 'Cash Payment - Immediate Ticketing'}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {bookingData?.owner === 'TR'
+                        ? 'Pay via agent deposit for immediate ticketing.'
+                        : 'Pay by cash for immediate ticket issuance.'}
+                    </div>
+                  </div>
+                </label>
+                <label className="flex items-start gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="bookingOption"
+                    value="card"
+                    checked={bookingOption === 'card'}
+                    onChange={() => setBookingOption('card')}
+                    className="mt-1"
+                  />
+                  <div>
+                    <div className="font-medium text-gray-900">Card Payment - Immediate Ticketing</div>
+                    <div className="text-sm text-gray-500">Pay by card for immediate ticket issuance.</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* ============================================================ */}
+            {/* Card payment information (shown when card option is selected) */}
+            {/* ============================================================ */}
+            {bookingOption === 'card' && (
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Card Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={payment.cardCode}
+                      onChange={(e) => handlePaymentChange('cardCode', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">Select</option>
+                      <option value="VI">VISA</option>
+                      <option value="MC">MasterCard</option>
+                      <option value="AX">AMEX</option>
+                      <option value="JC">JCB</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Card Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={payment.cardNumber}
+                      onChange={(e) => handlePaymentChange('cardNumber', e.target.value.replace(/\D/g, ''))}
+                      placeholder="1234 5678 9012 3456"
+                      maxLength={16}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Cardholder Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={payment.cardHolder}
+                      onChange={(e) => handlePaymentChange('cardHolder', e.target.value)}
+                      placeholder="HONG GILDONG"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Expiry Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={payment.expiry}
+                        onChange={(e) => handlePaymentChange('expiry', e.target.value.replace(/\D/g, ''))}
+                        placeholder="MMYY"
+                        maxLength={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        CVV <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={payment.cvv}
+                        onChange={(e) => handlePaymentChange('cvv', e.target.value.replace(/\D/g, ''))}
+                        placeholder="***"
+                        maxLength={4}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right: Price Summary (Fee Summary) */}
+          <aside className="w-80 flex-shrink-0">
+            <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Fee Summary</h3>
+
+              {/* Passenger Breakdown - per Passenger Detail Fee */}
+              {bookingData?.priceBreakdown && (
+                <div className="space-y-3 mb-4">
+                  {bookingData.priceBreakdown.passengerBreakdown.map((pax, idx) => (
+                    <div
+                      key={idx}
+                      className="pb-3 border-b border-gray-100 last:border-0"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-gray-900">
+                          {pax.type}
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {pax.count} person
+                        </span>
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between text-gray-500">
+                          <span>Base Fare</span>
+                          <span>
+                            {formatPrice(pax.baseFare, pax.currency)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-gray-500">
+                          <span>Tax / Fee</span>
+                          <span>
+                            {formatPrice(pax.tax, pax.currency)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-semibold text-gray-900 pt-1">
+                          <span>Subtotal</span>
+                          <span>
+                            {formatPrice(pax.subtotal, pax.currency)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Seat Price */}
+              {selectedSeats.length > 0 && (
+                <div className="mb-4 pb-4 border-b border-gray-200">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Selected Seats ({selectedSeats.length})</span>
+                    <span className="text-gray-900">{totalSeatPrice.toLocaleString()} KRW</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Service Price */}
+              {selectedServices.length > 0 && (
+                <div className="mb-4 pb-4 border-b border-gray-200">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Ancillary Services ({selectedServices.length} items)</span>
+                    <span className="text-gray-900">{totalServicePrice.toLocaleString()} KRW</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Total - Total Detail Display */}
+              {bookingData?.priceBreakdown && (
+                <div className="border-t-2 border-gray-300 pt-4 space-y-2 mb-6">
+                  <div className="flex justify-between text-base text-gray-500">
+                    <span>Total Base Fare</span>
+                    <span>
+                      {formatPrice(
+                        bookingData.priceBreakdown.baseFare,
+                        bookingData.priceBreakdown.currency
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-base text-gray-500">
+                    <span>Total Tax / Fee</span>
+                    <span>
+                      {formatPrice(
+                        bookingData.priceBreakdown.totalTax,
+                        bookingData.priceBreakdown.currency
+                      )}
+                    </span>
+                  </div>
+                  {(totalSeatPrice > 0 || totalServicePrice > 0) && (
+                    <div className="flex justify-between text-base text-gray-500">
+                      <span>Add-on Services</span>
+                      <span>
+                        {formatPrice(
+                          totalSeatPrice + totalServicePrice,
+                          bookingData.priceBreakdown.currency
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xl font-bold text-primary pt-2 border-t border-gray-300">
+                    <span>Total Amount</span>
+                    <span>
+                      {formatPrice(
+                        displayTotalPrice,
+                        bookingData.priceBreakdown.currency
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <button
+                onClick={handleSubmit}
+                disabled={!isValid || submitting}
+                className="w-full py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting
+                  ? 'Processing...'
+                  : bookingOption === 'hold'
+                  ? 'Book Now'
+                  : bookingOption === 'cash'
+                  ? (bookingData?.owner === 'TR' ? 'Agent Deposit & Ticketing' : 'Cash Payment & Ticketing')
+                  : 'Card Payment & Ticketing'}
+              </button>
+
+              <button
+                onClick={() => navigate(-1)}
+                className="w-full mt-2 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Go Back
+              </button>
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <Footer />
+
+      {/* Seat Selector Modal */}
+      {showSeatSelector && seatData && (
+        <SeatSelector
+          seatData={seatData}
+          passengers={seatPassengers}
+          onConfirm={handleSeatConfirm}
+          onClose={() => setShowSeatSelector(false)}
+          isLoading={loadingSeat}
+        />
+      )}
+
+      {/* Service Selector Modal */}
+      {showServiceSelector && serviceData && (
+        <ServiceSelector
+          serviceData={serviceData}
+          passengers={seatPassengers}
+          onConfirm={handleServiceConfirm}
+          onClose={() => setShowServiceSelector(false)}
+          isLoading={loadingService}
+        />
+      )}
+    </>
+  );
+}
+
+export default BookingContent;

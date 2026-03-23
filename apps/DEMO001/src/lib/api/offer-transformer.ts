@@ -1,0 +1,817 @@
+/**
+ * @template offer-transformer
+ * @version 2.1.0
+ * @description AirShopping/OfferPrice Response transformer
+ *
+ * ============================================================
+ * ⭐ Core Logic (v2.0 - 2024.01 revision)
+ * ============================================================
+ *
+ * Data flow (OriginDestList Mapping not required!):
+ * Offer.JourneyOverview[].PaxJourneyRefID → PaxJourneyList → PaxSegmentList
+ *
+ * JourneyOverview Array Order = itinerary direction:
+ * - index 0 = outbound (Outbound)
+ * - index 1 = inbound (Return)
+ *
+ * MatchResult Process:
+ * - FULL: JourneyOverview[] outbound + inbound All Include
+ * - PARTIAL: JourneyOverview[] 1items Itinerary only Include
+ *
+ * ============================================================
+ * ⭐ Required Checklist
+ * ============================================================
+ * [ ] FlightLeg Interface import (FlightCardfrom)
+ * [ ] Traverse all JourneyOverview[] entries (create legs array)
+ * [ ] MatchResult Normalization (toUpperCase)
+ * [ ] _raw.offerItems.paxRefId Extract (OfferItem.PaxRefID Directly Use)
+ * ============================================================
+ */
+
+import { Flight, FlightLeg } from '@/components/flight/FlightCard';
+import { PriceBreakdownData } from '@/components/flight/PriceBreakdown';
+
+// ============================================================
+// AirShoppingRS Types
+// ============================================================
+
+export interface AirShoppingResponse {
+  ResultMessage?: {
+    Code: string;
+    Message?: string;
+    MessageDetail?: {
+      Errors?: Array<{
+        Owner?: string;
+        Message?: string;
+        Code?: string;
+        Type?: string;
+      }>;
+      Warnings?: Array<{
+        Owner?: string;
+        Message?: string;
+        Code?: string;
+        Type?: string;
+      }>;
+    };
+  };
+  TransactionID: string;
+  Recipient?: {
+    TravelAgency?: {
+      AgencyID?: string; // DEMO001
+      SiteCode?: string;
+    };
+  };
+  PointOfSale?: string;
+  Offer: Array<{
+    OfferID: string;
+    Owner: string;
+    ResponseID: string;
+    ValidatingCarrier?: string;
+    OfferTimeLimit?: string;
+    TotalPrice: {
+      TotalAmount: { Amount: number; CurCode: string };
+      TotalBaseAmount?: { Amount: number; CurCode: string };
+      TotalTaxAmount?: { Amount: number; CurCode: string };
+      TravelAgencyServiceFee?: Array<unknown>;
+      FopPromotion?: Array<unknown>;
+    };
+    // ⭐ Core: JourneyOverview Array - Itinerary to Order Include
+    // FULL: [outbound, inbound], PARTIAL: [outbound] or [inbound]
+    JourneyOverview?: Array<{
+      PaxJourneyRefID: string;
+      PriceClassInfo?: {
+        PriceClass?: string;
+        Code?: string;
+        Name?: string;
+        Descriptions?: Array<{ Text?: string } | string>;
+      };
+    }>;
+    BaggageAllowance?: Array<{
+      BaggageAllowanceRefID?: string;
+      PaxJourneyRefID?: string;
+      TypeCode?: string;
+    }>;
+    OfferItem: Array<{
+      OfferItemID: string;
+      Mandatory?: boolean;
+      Owner?: string;
+      Price?: {
+        TotalAmount: { Amount: number; CurCode?: string };
+      };
+      PaxRefID?: string[]; // ⭐ Required: For OfferPrice API - extract from here!
+      PaxJourneyRefID?: string[]; // for Fallback
+      FareDetail?: Array<{
+        BaseAmount?: { Amount: number; CurCode?: string };
+        TaxTotal?: { Amount: number; CurCode?: string };
+        Tax?: Array<{
+          TaxCode?: string;
+          Amount?: { Amount: number; CurCode?: string };
+        }>;
+        FareComponent?: Array<{
+          PaxSegmentRefID?: string[];
+          FareBasis?: {
+            FareBasisCode?: string;
+            RBD?: string;
+          };
+          Penalty?: {
+            Change?: string;
+            Refund?: string;
+            Detail?: Array<unknown>;
+            Description?: Array<unknown>;
+          };
+        }>;
+      }>;
+      Service?: Array<{
+        ServiceID: string;
+        PaxRefID: string | string[];
+        PaxJourneyRefID?: string;
+      }>;
+    }>;
+    MatchResult?: string; // ⭐ Required: 'FULL' | 'PARTIAL' (Case Caution!)
+  }>;
+  DataLists?: {
+    OriginDestList?: Array<{
+      OriginDestID: string;
+      PaxJourneyRefID: string[];
+    }>;
+    PaxJourneyList?: Array<{
+      PaxJourneyID: string;
+      PaxSegmentRefID: string[];
+      Duration?: string;
+    }>;
+    PaxSegmentList?: Array<{
+      PaxSegmentID: string;
+      Departure: {
+        AirportCode: string;
+        AirportName?: string;
+        Date: string;
+        Time: string;
+        Terminal?: { Name: string };
+      };
+      Arrival: {
+        AirportCode: string;
+        AirportName?: string;
+        Date: string;
+        Time: string;
+        Terminal?: { Name: string };
+      };
+      MarketingCarrier: {
+        AirlineID: string;
+        Name?: string;
+        FlightNumber: string;
+      };
+      OperatingCarrier?: {
+        AirlineID: string;
+        Name?: string;
+      };
+      CabinType?: {
+        Code: string;
+        Definition?: string;
+      };
+      FlightDuration?: string;
+    }>;
+    PaxList?: Array<{
+      PaxID: string;
+      Ptc: 'ADT' | 'CHD' | 'INF';
+    }>;
+    BaggageAllowanceList?: Array<{
+      BaggageAllowanceID: string;
+      WeightAllowance?: {
+        MaxWeight: number;
+        WeightUnit: string;
+      };
+      PieceAllowance?: {
+        TotalQuantity: number;
+      };
+    }>;
+    PriceClassList?: Array<{
+      PriceClassID: string;
+      Name: string;
+      Code?: string;
+    }>;
+    FareList?: Array<{
+      FareListID: string;
+      FareBasisCode: string;
+    }>;
+  };
+}
+
+// ============================================================
+// OfferPriceRS Types
+// ============================================================
+
+export interface OfferPriceResponse {
+  ResultMessage?: {
+    Code: string;
+    Message?: string;
+  };
+  TransactionID: string;
+  PricedOffer: {
+    ResponseID: string;
+    OfferID: string;
+    Owner: string;
+    TotalPrice: {
+      TotalAmount: { Amount: number; CurCode: string };
+      TotalBaseAmount: { Amount: number; CurCode: string };
+      TotalTaxAmount: { Amount: number; CurCode: string };
+    };
+    OfferTimeLimit?: string;
+    PaymentTimeLimit?: string;
+    JourneyOverview?: Array<{
+      PaxJourneyRefID: string;
+      PriceClassInfo?: {
+        Code: string;
+        Name: string;
+        Descriptions?: Array<string | { Text?: string }>;
+      };
+    }>;
+    BaggageAllowance?: Array<{
+      PaxJourneyRefID: string;
+      PaxRefID: string[];
+      TypeCode?: string;
+      MaximumWeightAllowance?: {
+        Value: number;
+        UnitCode: string;
+      };
+    }>;
+    OfferItem: Array<{
+      OfferItemID: string;
+      // ⭐ Seat/Service items's Case Directly PaxRefID 짐 (WF_PB_SEAT_REPRICE)
+      PaxRefID?: string[];
+      Price?: {
+        TotalAmount: { Amount: number };
+      };
+      FareDetail?: Array<{
+        PaxRefID: string[];
+        BaseAmount: { Amount: number; CurCode: string };
+        TaxTotal: { Amount: number; CurCode: string };
+        Tax?: Array<{
+          TaxCode: string;
+          Amount: { Amount: number; CurCode: string };
+        }>;
+        FareComponent?: Array<{
+          FareBasis?: string;
+          Penalty?: {
+            Change?: string;
+            Refund?: string;
+            Detail?: Array<{
+              Type: string;
+              Application?: { Code: string };
+              Amounts?: Array<{
+                AmountApplication: string;
+                CurrencyAmountValue: number;
+                Code: string;
+              }>;
+            }>;
+          };
+        }>;
+      }>;
+      PaxJourneyRefID?: string[];
+      // ⭐ Service items (Ancillary service)
+      Service?: Array<{
+        ServiceID: string;
+        PaxRefID: string | string[];
+        PaxJourneyRefID?: string;
+      }>;
+    }>;
+  };
+  DataLists?: AirShoppingResponse['DataLists'];
+}
+
+// ============================================================
+// Transform Functions
+// ============================================================
+
+/**
+ * AirShoppingRS → Flight[]
+ *
+ * ⭐ Core Logic (v2.0):
+ * - Offer.JourneyOverview[] Array Directly using traverse Itinerary info Extract
+ * - OriginDestList Mapping not required (JourneyOverview itinerary order is provided)
+ * - JourneyOverview Array Index = itinerary direction (0=outbound, 1=inbound)
+ *
+ * Data flow:
+ * Offer.JourneyOverview[].PaxJourneyRefID → PaxJourneyList → PaxSegmentList
+ */
+export function transformOffersToFlights(response: AirShoppingResponse): Flight[] {
+  const offers = response.Offer || [];
+  const dataLists = response.DataLists;
+
+  if (!dataLists) {
+    console.warn('[Transformer] DataLists is empty');
+    return [];
+  }
+
+  const flights: Flight[] = [];
+  const originDestList = dataLists.OriginDestList || [];
+  const paxJourneyList = dataLists.PaxJourneyList || [];
+  const paxSegmentList = dataLists.PaxSegmentList || [];
+
+  // ⭐ For PARTIAL Mode: Journey ID → direction Mapping
+  // Method 1: OD ID Suffix Analysis (OND1, OD1 → outbound / OND2, OD2 → inbound)
+  // Method 2: OD ID absent Airline Departure Airportto Judgment
+  const journeyToDirectionMap = new Map<string, 'outbound' | 'inbound'>();
+
+  originDestList.forEach((od) => {
+    // OD from ID direction Extract: 'SQ_OND1', 'KE_OD1' → 1 = outbound / 2 = inbound
+    const odIdMatch = od.OriginDestID.match(/(\d+)$/);
+    const odNum = odIdMatch ? parseInt(odIdMatch[1]) : 1;
+    const direction: 'outbound' | 'inbound' = odNum === 1 ? 'outbound' : 'inbound';
+
+    od.PaxJourneyRefID.forEach((journeyId) => {
+      journeyToDirectionMap.set(journeyId, direction);
+    });
+  });
+
+  // ⭐ Departure Airport based direction Determine For baseline setup
+  // First OD in OriginDestList is outbound, using that journey's departure airport as criteria
+  let outboundOriginAirport: string | null = null;
+  if (originDestList.length > 0 && originDestList[0].PaxJourneyRefID.length > 0) {
+    const firstJourneyId = originDestList[0].PaxJourneyRefID[0];
+    const firstJourney = paxJourneyList.find(j => j.PaxJourneyID === firstJourneyId);
+    if (firstJourney && firstJourney.PaxSegmentRefID.length > 0) {
+      const firstSegment = paxSegmentList.find(s => s.PaxSegmentID === firstJourney.PaxSegmentRefID[0]);
+      if (firstSegment) {
+        outboundOriginAirport = firstSegment.Departure.AirportCode;
+      }
+    }
+  }
+
+  offers.forEach((offer, idx) => {
+    // ⭐ MatchResult Normalization: API may return "Partial" or "PARTIAL"
+    const rawMatchResult = offer.MatchResult?.toUpperCase() || 'FULL';
+    const matchResult: 'FULL' | 'PARTIAL' = rawMatchResult === 'PARTIAL' ? 'PARTIAL' : 'FULL';
+
+    // ⭐ Core: Traverse all JourneyOverview arrays to create legs
+    const journeyOverviews = offer.JourneyOverview || [];
+
+    // JourneyOverview if not present OfferItem.from PaxJourneyRefID Extract time
+    if (journeyOverviews.length === 0 && offer.OfferItem?.[0]?.PaxJourneyRefID) {
+      offer.OfferItem[0].PaxJourneyRefID.forEach((journeyId) => {
+        journeyOverviews.push({ PaxJourneyRefID: journeyId });
+      });
+    }
+
+    if (journeyOverviews.length === 0) {
+      if (idx < 5) {
+        console.warn(`[Transformer] Offer[${idx}] has no JourneyOverview, skipping`);
+      }
+      return;
+    }
+
+    // ⭐ each JourneyOverview to FlightLeg Conversion
+    const legs: FlightLeg[] = [];
+
+    journeyOverviews.forEach((jo, joIndex) => {
+      const journeyId = jo.PaxJourneyRefID;
+      const journey = paxJourneyList.find(j => j.PaxJourneyID === journeyId);
+
+      if (!journey) {
+        if (idx < 5) {
+          console.warn(`[Transformer] Offer[${idx}] Journey ${journeyId} not found`);
+        }
+        return;
+      }
+
+      // Journey's Segments Retrieval
+      const segments = journey.PaxSegmentRefID
+        .map(segId => paxSegmentList.find(s => s.PaxSegmentID === segId))
+        .filter(Boolean) as NonNullable<typeof paxSegmentList>[number][];
+
+      if (segments.length === 0) {
+        return;
+      }
+
+      const firstSeg = segments[0];
+      const lastSeg = segments[segments.length - 1];
+
+      // ⭐ direction specific logic
+      // FULL Mode: JourneyOverview Array to Index Determine (0=outbound, 1=inbound)
+      // PARTIAL Mode: OriginDestList Mapping or Departure Airportto Determine
+      let direction: 'outbound' | 'inbound';
+
+      if (matchResult === 'FULL') {
+        // FULL Mode: Array order determines direction
+        direction = joIndex === 0 ? 'outbound' : 'inbound';
+      } else {
+        // PARTIAL Mode: 1) OriginDestList Mapping Use, 2) if absent Departure Airportto Judgment
+        const mappedDirection = journeyToDirectionMap.get(journeyId);
+
+        if (mappedDirection) {
+          direction = mappedDirection;
+        } else if (outboundOriginAirport) {
+          // Mapping if absent Departure Airportto Judgment (TR, etc. Partial Airline)
+          direction = firstSeg.Departure.AirportCode === outboundOriginAirport ? 'outbound' : 'inbound';
+        } else {
+          // fallback: to outbound Process
+          direction = 'outbound';
+        }
+      }
+      const directionLabel = direction === 'outbound' ? 'Outbound' : 'Return';
+
+      const leg: FlightLeg = {
+        direction,
+        directionLabel,
+        journeyId,
+        departure: {
+          airport: firstSeg.Departure.AirportCode,
+          airportName: firstSeg.Departure.AirportName,
+          time: firstSeg.Departure.Time.substring(0, 5),
+          date: firstSeg.Departure.Date,
+          terminal: firstSeg.Departure.Terminal?.Name,
+        },
+        arrival: {
+          airport: lastSeg.Arrival.AirportCode,
+          airportName: lastSeg.Arrival.AirportName,
+          time: lastSeg.Arrival.Time.substring(0, 5),
+          date: lastSeg.Arrival.Date,
+          terminal: lastSeg.Arrival.Terminal?.Name,
+        },
+        duration: formatDuration(journey.Duration || firstSeg.FlightDuration || 'PT0M'),
+        stops: segments.length - 1,
+        stopoverAirports: segments.length > 1
+          ? segments.slice(0, -1).map(s => s.Arrival.AirportCode)
+          : undefined,
+        flightNumber: `${firstSeg.MarketingCarrier.AirlineID}${firstSeg.MarketingCarrier.FlightNumber}`,
+        cabinClass: formatCabinClass(firstSeg.CabinType?.Code),
+        segments: segments.map(seg => ({
+          segmentId: seg.PaxSegmentID,
+          flightNumber: `${seg.MarketingCarrier.AirlineID}${seg.MarketingCarrier.FlightNumber}`,
+          carrier: seg.MarketingCarrier.AirlineID,
+          departure: {
+            airport: seg.Departure.AirportCode,
+            airportName: seg.Departure.AirportName,
+            time: seg.Departure.Time.substring(0, 5),
+            date: seg.Departure.Date,
+            terminal: seg.Departure.Terminal?.Name,
+          },
+          arrival: {
+            airport: seg.Arrival.AirportCode,
+            airportName: seg.Arrival.AirportName,
+            time: seg.Arrival.Time.substring(0, 5),
+            date: seg.Arrival.Date,
+            terminal: seg.Arrival.Terminal?.Name,
+          },
+          duration: seg.FlightDuration ? formatDuration(seg.FlightDuration) : undefined,
+          cabinClass: formatCabinClass(seg.CabinType?.Code),
+        })),
+      };
+
+      legs.push(leg);
+    });
+
+    if (legs.length === 0) {
+      return;
+    }
+
+    // debug log (처 5items offer)
+    if (idx < 5) {
+      console.log(`[Transformer] Offer[${idx}]`, {
+        matchResult: `${offer.MatchResult} → ${matchResult}`,
+        legsCount: legs.length,
+        legs: legs.map(l => ({
+          direction: l.direction,
+          route: `${l.departure.airport} → ${l.arrival.airport}`,
+        })),
+      });
+    }
+
+    // ⭐ first th leg Criteriato Existing Field fill (backward compatibility)
+    const firstLeg = legs[0];
+
+    const flight: Flight = {
+      id: offer.OfferID,
+      airline: {
+        code: offer.Owner,
+        name: getAirlineName(offer.Owner),
+        logo: getAirlineLogo(offer.Owner),
+      },
+      flightNumber: firstLeg.flightNumber,
+      // backward compatibility: first th leg Criteria
+      departure: firstLeg.departure,
+      arrival: firstLeg.arrival,
+      duration: firstLeg.duration,
+      stops: firstLeg.stops,
+      stopoverAirports: firstLeg.stopoverAirports,
+      cabinClass: firstLeg.cabinClass,
+      baggage: formatBaggage(dataLists.BaggageAllowanceList?.[0]),
+      price: offer.TotalPrice.TotalAmount.Amount,
+      currency: offer.TotalPrice.TotalAmount.CurCode,
+      // ⭐ New Field: All Itinerary info
+      legs,
+      _raw: {
+        responseId: offer.ResponseID,
+        offerId: offer.OfferID,
+        owner: offer.Owner,
+        // ⭐ NOTE: OfferItem.PaxRefID Directly Use!
+        offerItems: offer.OfferItem.map((item) => ({
+          offerItemId: item.OfferItemID,
+          paxRefId: item.PaxRefID || [],
+        })),
+        matchResult,
+        originDestId: firstLeg.journeyId, // backward compatibility
+      },
+    };
+
+    flights.push(flight);
+  });
+
+  return flights;
+}
+
+/**
+ * OfferPriceRS → PriceBreakdownData
+ */
+export function transformOfferPriceResponse(response: OfferPriceResponse): PriceBreakdownData {
+  const pricedOffer = response.PricedOffer;
+  const dataLists = response.DataLists;
+
+  // Passenger breakdown
+  const passengerBreakdown = pricedOffer.OfferItem.flatMap((item) =>
+    (item.FareDetail || []).map((fareDetail) => {
+      const paxRefId = fareDetail.PaxRefID[0];
+      const pax = dataLists?.PaxList?.find((p) => p.PaxID === paxRefId);
+
+      const taxDetails = (fareDetail.Tax || []).map((tax) => ({
+        code: tax.TaxCode,
+        name: getTaxName(tax.TaxCode),
+        amount: tax.Amount.Amount,
+      }));
+
+      return {
+        type: formatPtc(pax?.Ptc || 'ADT'),
+        typeCode: pax?.Ptc || 'ADT',
+        count: fareDetail.PaxRefID.length,
+        baseFare: fareDetail.BaseAmount.Amount,
+        tax: fareDetail.TaxTotal.Amount,
+        subtotal: fareDetail.BaseAmount.Amount + fareDetail.TaxTotal.Amount,
+        currency: fareDetail.BaseAmount.CurCode,
+        taxDetails,
+      };
+    })
+  );
+
+  // Fare rules
+  const fareRules = (pricedOffer.JourneyOverview || []).map((journey) => {
+    const rules: Record<string, string> = {};
+
+    (journey.PriceClassInfo?.Descriptions || []).forEach((desc) => {
+      const text = typeof desc === 'string' ? desc : (desc as { Text?: string })?.Text || '';
+      if (!text) return;
+
+      if (text.includes('Earn KrisFlyer miles')) rules.mileageEarn = text;
+      if (text.includes('Cabin baggage')) rules.cabinBaggage = text;
+      if (text.includes('Check-in baggage')) rules.checkedBaggage = text;
+      if (text.includes('Booking cancellation fee')) rules.cancellationFee = text;
+      if (text.includes('Booking change fee')) rules.changeFee = text;
+      if (text.includes('Seat Selection')) rules.seatSelection = text;
+    });
+
+    return {
+      journeyRef: journey.PaxJourneyRefID,
+      priceClassName: journey.PriceClassInfo?.Name || '',
+      priceClassCode: journey.PriceClassInfo?.Code || '',
+      rules,
+    };
+  });
+
+  // Penalty info
+  const firstFareDetail = pricedOffer.OfferItem[0]?.FareDetail?.[0];
+  const penalty = firstFareDetail?.FareComponent?.[0]?.Penalty;
+
+  const penaltyInfo = penalty
+    ? {
+        canChange: penalty.Change === 'true',
+        canRefund: penalty.Refund === 'true',
+        changeFee: extractFeeRange(
+          penalty.Detail?.filter((d) => (d as { Type: string }).Type === 'Change') || []
+        ),
+        cancelFee: extractFeeRange(
+          penalty.Detail?.filter((d) => (d as { Type: string }).Type === 'Cancel') || []
+        ),
+      }
+    : null;
+
+  // Baggage allowance
+  const baggageAllowance = (pricedOffer.BaggageAllowance || []).map((baggage) => ({
+    journeyRef: baggage.PaxJourneyRefID,
+    formatted: baggage.MaximumWeightAllowance
+      ? `${baggage.MaximumWeightAllowance.Value}${
+          baggage.MaximumWeightAllowance.UnitCode === 'KGM' ? 'kg' : baggage.MaximumWeightAllowance.UnitCode
+        }`
+      : 'No info',
+  }));
+
+  return {
+    totalAmount: pricedOffer.TotalPrice.TotalAmount.Amount,
+    baseFare: pricedOffer.TotalPrice.TotalBaseAmount.Amount,
+    totalTax: pricedOffer.TotalPrice.TotalTaxAmount.Amount,
+    currency: pricedOffer.TotalPrice.TotalAmount.CurCode,
+    formattedTotal: `${pricedOffer.TotalPrice.TotalAmount.Amount.toLocaleString()} ${
+      pricedOffer.TotalPrice.TotalAmount.CurCode
+    }`,
+    offerTimeLimit: pricedOffer.OfferTimeLimit || new Date(Date.now() + 3600000).toISOString(),
+    paymentTimeLimit: pricedOffer.PaymentTimeLimit || new Date(Date.now() + 3600000).toISOString(),
+    passengerBreakdown,
+    fareRules,
+    penaltyInfo,
+    baggageAllowance,
+    _orderData: {
+      transactionId: response.TransactionID,
+      responseId: pricedOffer.ResponseID,
+      offerId: pricedOffer.OfferID,
+      owner: pricedOffer.Owner,
+      paxList: (dataLists?.PaxList || []).map((pax) => ({
+        paxId: pax.PaxID,
+        ptc: pax.Ptc,
+      })),
+      // ⭐⭐⭐ WF_PB_SEAT_REPRICE bug Prevention ⭐⭐⭐
+      // paxRefId Extract Priority:
+      // 1. item.PaxRefID (Seat Item - Directly Specified)
+      // 2. item.FareDetail[].PaxRefID (Fare Item)
+      // 3. item.Service[].PaxRefID (Service items)
+      //
+      // NOTE: FareDetail only if Process Seat/Service items's paxRefId Empty array Done!
+      // Case from OrderCreate 500 error occurs!
+      offerItems: pricedOffer.OfferItem.map((item) => {
+        let paxRefId: string[] = [];
+
+        // 1. Case where PaxRefID exists directly (Seat item - highest priority)
+        if (item.PaxRefID && item.PaxRefID.length > 0) {
+          paxRefId = item.PaxRefID;
+        }
+        // 2. from FareDetail Extract (Fare Item)
+        else if (item.FareDetail && item.FareDetail.length > 0) {
+          paxRefId = item.FareDetail.flatMap((fd) => fd.PaxRefID);
+        }
+        // 3. from Service Extract (Service items)
+        else if (item.Service && item.Service.length > 0) {
+          paxRefId = item.Service.flatMap((svc) => {
+            const ref = svc.PaxRefID;
+            return Array.isArray(ref) ? ref : [ref];
+          });
+        }
+
+        return {
+          offerItemId: item.OfferItemID,
+          paxRefId,
+        };
+      }),
+    },
+  };
+}
+
+// ============================================================
+// Helper Functions
+// ============================================================
+
+function formatDuration(duration: string): string {
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  if (!match) return duration;
+
+  const hours = match[1] ? `${match[1]}Time` : '';
+  const minutes = match[2] ? ` ${match[2]}m` : '';
+  return `${hours}${minutes}`.trim();
+}
+
+function formatCabinClass(code?: string): string {
+  const cabinMap: Record<string, string> = {
+    Y: 'Economy class',
+    W: 'Premium/Business Economy class',
+    M: 'Economy class',
+    C: 'Business class',
+    J: 'Business class',
+    F: 'First',
+  };
+  return code ? cabinMap[code] || code : 'Economy class';
+}
+
+function formatPtc(ptc: string): string {
+  const ptcMap: Record<string, string> = {
+    ADT: 'Adult',
+    CHD: 'Child',
+    INF: 'Infant',
+  };
+  return ptcMap[ptc] || ptc;
+}
+
+function formatBaggage(allowance?: {
+  WeightAllowance?: { MaxWeight: number; WeightUnit: string };
+  PieceAllowance?: { TotalQuantity: number };
+}): string {
+  if (!allowance) return 'No info';
+  if (allowance.WeightAllowance) {
+    return `${allowance.WeightAllowance.MaxWeight}${allowance.WeightAllowance.WeightUnit === 'KGM' ? 'kg' : allowance.WeightAllowance.WeightUnit}`;
+  }
+  if (allowance.PieceAllowance) {
+    return `${allowance.PieceAllowance.TotalQuantity}PC`;
+  }
+  return 'No info';
+}
+
+function getTaxName(code: string): string {
+  const taxCodeMap: Record<string, string> = {
+    BP: 'Departure Tax',
+    YR: 'Fuel Surcharge',
+    SG: 'Singapore Airport Tax',
+    L7: 'Airport Facility Charge',
+    OP: 'Security Fee',
+  };
+  return taxCodeMap[code] || code;
+}
+
+function getAirlineName(code: string): string {
+  const airlineMap: Record<string, string> = {
+    SQ: 'Singapore Airlines',
+    KE: 'Korean Air',
+    OZ: 'Asiana Airlines',
+    AA: 'American Airlines',
+    DL: 'Delta Air Lines',
+    UA: 'United Airlines',
+    TR: 'Scoot',
+    AF: 'Air France',
+    KL: 'KLM Royal Dutch Airlines',
+    QR: 'Qatar Airways',
+    TG: 'Thai Airways',
+    NH: 'All Nippon Airways',
+    JL: 'Japan Airlines',
+    CX: 'Cathay Pacific',
+    EK: 'Emirates',
+    LH: 'Lufthansa',
+    BA: 'British Airways',
+    QF: 'Qantas',
+    EY: 'Etihad Airways',
+    MH: 'Malaysia Airlines',
+    VN: 'Vietnam Airlines',
+    TK: 'Turkish Airlines',
+    AI: 'Air India',
+    CA: 'Air China',
+    MU: 'China Eastern Airlines',
+    CZ: 'China Southern Airlines',
+    PR: 'Philippine Airlines',
+    GA: 'Garuda Indonesia',
+    SU: 'Aeroflot',
+    LX: 'Swiss International Air Lines',
+    OS: 'Austrian Airlines',
+    SK: 'SAS Scandinavian Airlines',
+    AY: 'Finnair',
+    IB: 'Iberia',
+    AZ: 'ITA Airways',
+  };
+  return airlineMap[code] || code;
+}
+
+/**
+ * Airline Logo URL Create
+ * pics.avs.io CDN Use (IATA Code based)
+ * @param code IATA Carrier code (e.g.: SQ, KE)
+ * @returns Airline Logo URL
+ */
+function getAirlineLogo(code: string): string {
+  // pics.avs.io CDN - most notspecific-like Airline Image CDN
+  // Format: https://pics.avs.io/{width}/{height}/{IATA_CODE}.png
+  return `https://pics.avs.io/70/70/${code}.png`;
+}
+
+function extractFeeRange(details: Array<{
+  Type: string;
+  Application?: { Code: string };
+  Amounts?: Array<{
+    AmountApplication: string;
+    CurrencyAmountValue: number;
+    Code: string;
+  }>;
+}>): {
+  beforeDeparture: { min: number; max: number; currency: string } | null;
+  afterDeparture: { min: number; max: number; currency: string } | null;
+} | null {
+  if (!details.length) return null;
+
+  const beforeDept = details.find((d) => d.Application?.Code === '1');
+  const afterDept = details.find((d) => d.Application?.Code === '2');
+
+  return {
+    beforeDeparture: beforeDept?.Amounts
+      ? {
+          min:
+            beforeDept.Amounts.find((a) => a.AmountApplication === 'MIN')
+              ?.CurrencyAmountValue || 0,
+          max:
+            beforeDept.Amounts.find((a) => a.AmountApplication === 'MAX')
+              ?.CurrencyAmountValue || 0,
+          currency: beforeDept.Amounts[0]?.Code || 'KRW',
+        }
+      : null,
+    afterDeparture: afterDept?.Amounts
+      ? {
+          min:
+            afterDept.Amounts.find((a) => a.AmountApplication === 'MIN')
+              ?.CurrencyAmountValue || 0,
+          max:
+            afterDept.Amounts.find((a) => a.AmountApplication === 'MAX')
+              ?.CurrencyAmountValue || 0,
+          currency: afterDept.Amounts[0]?.Code || 'KRW',
+        }
+      : null,
+  };
+}

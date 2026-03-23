@@ -1,0 +1,533 @@
+/**
+ * @template middleware-client
+ * @version 4.1.0
+ * @description Middleware Backend API Client (Browser-compatible)
+ * @placeholders DEMO001
+ * @requires seatSelection Support (Seat selection - WF_PB_SEAT_REPRICE)
+ * @requires bookingInstructions Support (Weight-based service - XBAG, etc.)
+ * @requires OrderCancel Support (Booking cancellation - WF_HELD_CANCEL, WF_TKT_REFUND)
+ * @requires OrderReshop Support (Refund Quote/Estimate Retrieval - WF_TKT_REFUND)
+ *
+ * Browser → Middleware Backend → PolarHub
+ *
+ * In production (CloudFront multi-origin), VITE_MIDDLEWARE_URL is empty (same-origin).
+ * In development, Vite dev proxy forwards /middleware/* to localhost:3000.
+ */
+
+// Middleware Backend URL
+// Empty string = same-origin (CloudFront multi-origin proxies /middleware/*)
+const MIDDLEWARE_BASE_URL = import.meta.env.VITE_MIDDLEWARE_URL || '';
+
+/**
+ * Generate 32-char hex transaction ID
+ * Tracks PolarHub API transactionId per session.
+ *
+ * ⚠️⚠️⚠️ Important: transactionId Create Rules ⚠️⚠️⚠️
+ *
+ * PolarHub API transactionId Exactly must be a 32-char hex string .
+ * Wrong Format if Use Next Error Occurs:
+ * error: ["transactionId must be a 32-character hexadecimal string"]
+ *
+ * ❌ Never Prohibited: transactionId: `TXN_${Date.now()}`
+ * ✅ Correct approach: transactionId: generateTransactionId()
+ *
+ * @returns 32-char hex string (e.g.: "a1b2c3d4e5f6789012345678abcdef01")
+ */
+export function generateTransactionId(): string {
+ return Array.from({ length: 32 }, () =>
+  Math.floor(Math.random() * 16).toString(16)
+ ).join('');
+}
+
+// ============================================================
+// Request DTOs
+// ============================================================
+
+export interface AirShoppingRequest {
+ transactionId: string;
+ originDestList: Array<{
+  origin: string;
+  destination: string;
+  departureDate: string;
+ }>;
+ passengers: Array<{
+  type: 'ADT' | 'CHD' | 'INF';
+  count: number;
+ }>;
+ cabin?: 'Y' | 'W' | 'C' | 'F';
+ pointOfSale?: string;
+ criteria?: {
+  direct?: boolean;
+  airlinePreference?: {
+   airlineId?: string[];
+  };
+ };
+}
+
+export interface OfferPriceRequest {
+ transactionId: string;
+ offers: Array<{
+  responseId: string;
+  offerId: string;
+  owner: string;
+  offerItems: Array<{
+   offerItemId: string;
+   paxRefId: string[];
+   // ⭐ Seat selection Information (WF_PB_SEAT_REPRICE)
+   seatSelection?: {
+    column: string;
+    row: string;
+   };
+   // ⭐ Weight-based service BookingInstructions (XBAG, etc.)
+   // Middleware spec: ositext (Lowercase t), ssrCode Exclude
+   bookingInstructions?: {
+    text: string[]; // Weight inputValue Include (e.g.: ["TTL10KG"])
+    ositext?: string[]; // Method Original (e.g.: ["TTL\\s?%WVAL%KG"])
+   };
+  }>;
+ }>;
+ paxList: Array<{
+  paxId: string;
+  ptc: 'ADT' | 'CHD' | 'INF';
+ }>;
+ // ⭐ Post-booking OfferPrice: ExistingOrderCriteria required for seat/service reprice (AF, KL, etc.)
+ criteria?: {
+  existingOrderCriteria?: {
+   orderId: string;
+   paxRefId: string[];
+  };
+ };
+}
+
+export interface OrderRetrieveRequest {
+ transactionId: string;
+ orderId: string;
+ // ⚠️ owner OrderRetrieve in API Includedoes not (in Spec None)
+}
+
+export interface OrderCancelRequest {
+ transactionId: string;
+ orderId: string;
+ pointOfSale?: string;
+ // Note: refundQuoteId API in Spec None
+}
+
+export interface OrderReshopRequest {
+ transactionId: string;
+ orderId: string;
+ actionContext?: string; // '8' = Voluntary, '9' = Involuntary
+ updateOrder: {
+  // Used for schedule changes
+  reshopOrder?: {
+   serviceOrder: {
+    delete?: Array<{ orderItemRefId: string }>;
+    add?: Array<{
+     originDest: {
+      origin: string;
+      destination: string;
+      departureDate: string;
+     };
+    }>;
+   };
+  };
+  // ⭐ Post-ticketing Fare when recalculation Use (Group A: LH, EK, etc.)
+  repricedOrderRefId?: string;
+  // ⭐ Refund Quote/Estimate when Retrieval Use (STRING Type!)
+  cancelOrderRefId?: string;
+ };
+ pointOfSale?: string;
+}
+
+/**
+ * OrderChange Request - Passenger information Change
+ *
+ * ⭐ v3.10.1: Per carrier ChangeOrderChoice/UpdatePax Structure different
+ * - AF, KL: CurrentPaxRefID only Use
+ * - AY: Add NewPaxRefID, Delete CurrentPaxRefID
+ * - HA, TK: Add NewPaxRefID, Delete CurrentPaxRefID, Change Both
+ *
+ * Actual Request structure pax-change/route.from ts Per to carrier Build
+ */
+export interface PaxChangeRequest {
+ Sender?: {
+  TravelAgency: {
+   AgencyID: string;
+   SalesBranchID: string;
+   ContactInfoRefID?: unknown[];
+  };
+ };
+ PointOfSale?: string;
+ TransactionID: string;
+ Query: {
+  OrderID: string;
+  ChangeOrderChoice: {
+   UpdatePax: Array<{
+    CurrentPaxRefID?: string;
+    NewPaxRefID?: string;
+   }>;
+  };
+  PaxList: Array<{
+   PaxID: string;
+   Ptc: 'ADT' | 'CHD' | 'INF';
+   Individual?: {
+    IndividualID?: string;
+    Surname?: string;
+    GivenName?: string[];
+    MiddleName?: string[];
+    NameTitle?: string;
+    Birthdate?: string;
+    Gender?: string;
+   };
+   ContactInfoRefID?: string[];
+   IdentityDoc?: Array<{
+    IdentityDocType?: string;
+    IdentityDocID?: string;
+    ExpiryDate?: string;
+    IssuingCountryCode?: string;
+    CitizenshipCountryCode?: string;
+   }>;
+   LoyaltyProgramAccount?: Array<{
+    AccountNumber?: string;
+    LoyaltyProgramProviderName?: string;
+   }>;
+  }>;
+  ContactInfoList: Array<{
+   ContactInfoID: string;
+   EmailAddress?: string[];
+   Phone?: Array<{
+    CountryDialingCode?: string;
+    PhoneNumber?: string;
+   }>;
+   PostalAddress?: unknown[];
+  }>;
+  PaymentList?: unknown[];
+ };
+}
+// ============================================================
+// Post-ticketing (Post-Booking Ticketing) Request DTOs
+// ============================================================
+
+export interface OrderQuoteRequest {
+ transactionId: string;
+ /**
+  * ⚠️ CRITICAL: orderId Top-level in Level Required!
+  * API Spec: required: [transactionId, orderId]
+  * when Missing 400 Error occurs
+  */
+ orderId: string;
+ /** Fare recalculation Mode: repricedOrderId Use (WF_HELD_CONFIRM) */
+ repricedOrderId?: {
+  orderId: string;
+  orderItemRefId?: string[]; // When recalculating specific OrderItems only
+ };
+ /**
+  * ⚠️ CRITICAL: selectedOffer Arraymust be Does!
+  * API Spec: selectedOffer: type: array, items: SelectedOfferDto
+  * to Object when Pass 400 Error: "selectedOffer must be an array"
+  */
+ selectedOffer?: Array<{
+  responseId: string;
+  offerId: string;
+  owner: string;
+  offerItems?: Array<{
+   offerItemId: string;
+   paxRefId: string[];
+  }>;
+ }>;
+ pointOfSale?: string;
+}
+
+export interface OrderChangeRequest {
+ transactionId: string;
+ orderId: string;
+ /** Change selection */
+ changeOrderChoice: {
+  /** Group A/B/C: Accept recalculated fare (post-ticketing) */
+  acceptRepricedOrder?: {
+   offerRefId: string[]; // Minimum 1items Required! Group A/B: [offerId], Group C: [orderId]
+  };
+  /**
+   * Accept seat/service change
+   * ⚠️ API Spec: selectedPricedOffer Array Use (offerList Not!)
+   */
+  acceptSelectedQuotedOfferList?: {
+   selectedPricedOffer: Array<{
+    offerId: string;
+    owner: string;
+    responseId?: string;
+    offerItems?: Array<{
+     offerItemId: string;
+     paxRefId: string[];
+    }>;
+   }>;
+  };
+  /** unPayment order Cancellation (Hold cancel) */
+  cancelUnpaidOrder?: {
+   orderRefId: string;
+  };
+ };
+ /**
+  * ⚠️ CRITICAL: paymentList must be placed at top-level, outside changeOrderChoice!
+  * Placing in wrong position causes 400 error:
+  * "changeOrderChoice.property paymentList should not exist"
+  *
+  * ⚠️ CRITICAL: flattening Structure Use! (OpenAPI Spec and different!)
+  * - type: Payment method (to Uppercase Start: 'Card' | 'Cash' | 'AGT' | 'Voucher')
+  * - amount: Number (NOT { currencyCode, amount } Object!)
+  * - curCode: Currency Code
+  * - Payment per method Add Field Same in Level Placement
+  *
+  * ⚠️ CRITICAL: Add fields required for service purchase! (Even if empty array)
+  * - orderItemId: Order item IDs for payment allocation
+  * - offerItemId: Offer item IDs for payment allocation
+  * - paxRefId: Passenger IDs for payment allocation
+  */
+ paymentList?: Array<{
+  type: 'Card' | 'Cash' | 'AGT' | 'Voucher' | 'Ag';
+  amount: number;
+  curCode: string;
+  // ⭐ Required fields for service purchase (include even if empty array!)
+  orderItemId?: string[];
+  offerItemId?: string[];
+  paxRefId?: string[];
+  // Card Dedicated field
+  cardCode?: string;
+  cardNumber?: string;
+  cardHolderName?: string;
+  expiration?: string;
+  seriesCode?: string;
+  // AGT Dedicated field
+  agentDepositId?: string;
+  // Voucher Dedicated field
+  voucherId?: string;
+ }>;
+ pointOfSale?: string;
+}
+
+export interface OrderCreateRequest {
+ transactionId: string;
+ orders: Array<{
+  responseId: string;
+  offerId: string;
+  owner: string;
+  offerItems: Array<{
+   offerItemId: string;
+   paxRefId: string[];
+  }>;
+ }>;
+ paxList: Array<{
+  paxId: string;
+  ptc: 'ADT' | 'CHD' | 'INF';
+  individual: {
+   surname: string;
+   givenName: string[];
+   birthdate?: string;
+   gender?: 'MALE' | 'FEMALE';
+  };
+  identityDoc?: Array<{
+   identityDocType: 'PT' | 'NI' | 'DL';
+   identityDocId: string;
+   expiryDate?: string;
+   issuingCountryCode?: string;
+   citizenshipCountryCode?: string;
+  }>;
+  citizenshipCountryCode?: string;
+  residenceCountryCode?: string;
+  contactInfoRefId?: string[];
+ }>;
+ contactInfoList?: Array<{
+  contactInfoId: string;
+  phone?: {
+   label?: string;
+   countryDialingCode?: string;
+   phoneNumber: string;
+  };
+  emailAddress?: string;
+ }>;
+ paymentList?: Array<{
+  paymentMethod: {
+   card?: {
+    cardCode: 'VI' | 'MC' | 'AX' | 'JC' | string;
+    cardNumber: string;
+    cardHolderName: string;
+    expiration: string;
+    seriesCode?: string;
+   };
+   cash?: {
+    cashPaymentInd: boolean;
+   };
+   agentDeposit?: {
+    agentDepositId: string;
+   };
+  };
+  amount: {
+   currencyCode: string;
+   amount: number;
+  };
+ }>;
+ pointOfSale?: string;
+}
+
+// ============================================================
+// API Functions
+// ============================================================
+
+/**
+ * AirShopping API - Flight search
+ */
+export async function airShopping<T>(request: AirShoppingRequest): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/air-shopping', request);
+}
+
+/**
+ * OfferPrice API - Fare Detail Retrieval
+ */
+export async function offerPrice<T>(request: OfferPriceRequest): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/offer-price', request);
+}
+
+/**
+ * OrderRetrieve API - Booking detail retrieval
+ */
+export async function orderRetrieve<T>(request: OrderRetrieveRequest): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/order/retrieve', request);
+}
+
+/**
+ * OrderCreate API - Booking creation
+ */
+export async function orderCreate<T>(request: OrderCreateRequest): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/order', request);
+}
+
+/**
+ * OrderCancel API - Booking cancellation / Refund
+ * - WF_HELD_CANCEL: Before ticketing Cancellation (refundQuoteId not required)
+ * - WF_TKT_REFUND: After ticketing Refund (refundQuoteId Required)
+ */
+export async function orderCancel<T>(request: OrderCancelRequest): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/order/cancel', request);
+}
+
+/**
+ * OrderReshop API - Refund Quote/Estimate Retrieval / Schedule Change Option Retrieval
+ * - Refund Quote/Estimate: updateOrder.cancelOrderRefId Use (STRING!)
+ * - Schedule change: use updateOrder.reshopOrder
+ */
+export async function orderReshop<T>(request: OrderReshopRequest): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/order-reshop', request);
+}
+
+/**
+ * OrderQuote API - Fare recalculation / Service Change Quote/Estimate
+ * - Post-ticketing (WF_HELD_CONFIRM): repricedOrderId Use (Group B: KE, HA, SQ, AY, TK)
+ * - Service Change: selectedOffer Use
+ */
+export async function orderQuote<T>(request: OrderQuoteRequest): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/order-quote', request);
+}
+
+/**
+ * OrderChange API - Booking Change
+ * - Passenger information Change (Name, Contact, APIS, FFN) - PaxChangeRequest Use
+ * - Post-ticketing: changeOrderChoice.acceptRepricedOrder + paymentList
+ * - Service Change: changeOrderChoice.acceptSelectedQuotedOfferList
+ * - Cancellation: changeOrderChoice.cancelUnpaidOrder
+ */
+export async function orderChange<T>(request: OrderChangeRequest | PaxChangeRequest | unknown): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/order-change', request as Record<string, unknown>);
+}
+
+/**
+ * SeatAvailability API - Seat Retrieval
+ * - Prime Booking: offer Field usage (Booking before)
+ * - Post-Booking: order Field usage (Booking after)
+ */
+export async function seatAvailability<T>(request: {
+ transactionId: string;
+ offer?: {
+  responseId: string;
+  offerId: string;
+  owner: string;
+  offerItems: Array<{
+   offerItemId: string;
+   paxRefId: string[];
+  }>;
+ };
+ order?: { // ⚠️ owner Exclude!
+  orderId: string;
+  // owner order from External Separate Pass
+ };
+ paxList: Array<{
+  paxId: string;
+  ptc: 'ADT' | 'CHD' | 'INF';
+ }>;
+}): Promise<T> {
+ return callMiddlewareAPI<T>('/middleware/polarhub/seat-availability', request);
+}
+
+// ============================================================
+// Internal Helper
+// ============================================================
+
+async function callMiddlewareAPI<T>(endpoint: string, body: unknown): Promise<T> {
+ const url = `${MIDDLEWARE_BASE_URL}${endpoint}`;
+
+ if (import.meta.env.DEV) {
+  console.log(`[Middleware Client] ${endpoint} Request:`, JSON.stringify(body, null, 2));
+ }
+
+ const response = await fetch(url, {
+  method: 'POST',
+  headers: {
+   'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(body),
+ });
+
+ if (!response.ok) {
+  const errorText = await response.text();
+  if (import.meta.env.DEV) {
+   console.error(`[Middleware Client] ${endpoint} HTTP Error:`, response.status, errorText);
+  }
+  throw new Error(`Middleware API error: ${response.status} - ${errorText}`);
+ }
+
+ const data = await response.json();
+
+ if (import.meta.env.DEV) {
+  const responseStr = JSON.stringify(data);
+  console.log(`[Middleware Client] ${endpoint} Response:`,
+   responseStr.length > 2000
+    ? responseStr.substring(0, 2000) + `... (${responseStr.length} chars)`
+    : responseStr
+  );
+ }
+
+ return data as T;
+}
+
+// ============================================================
+// Utility Functions
+// ============================================================
+
+/**
+ * Check if API response code indicates success
+ * Different carriers use different success codes (OK, 00000, 0, SUCCESS, or absent)
+ */
+export function isSuccessCode(code?: string): boolean {
+ return code === 'OK' || code === '00000' || code === '0' || code === 'SUCCESS' || !code;
+}
+
+/**
+ * Cabin class mapping (UI → API)
+ */
+export function mapCabinClass(cabinClass: string): 'Y' | 'W' | 'C' | 'F' {
+ switch (cabinClass) {
+  case 'economy': return 'Y';
+  case 'premium': return 'W';
+  case 'business': return 'C';
+  case 'first': return 'F';
+  default: return 'Y';
+ }
+}

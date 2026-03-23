@@ -1,0 +1,1367 @@
+/**
+ * @template order-retrieve-transformer
+ * @description OrderRetrieve response transformation - 12-carrier matrix parsing
+ * @version 4.1.0
+ */
+
+/**
+ * @file order-retrieve-transformer.ts
+ * @version 2.0.0 (extracted from route.ts for Vite migration)
+ * @description OrderRetrieve response transformation logic
+ *
+ * ============================================================
+ * ⭐ Extracted transformation logic from booking/[id]/route.ts
+ * ============================================================
+ * This module contains all OrderRetrieve response transformation logic
+ * without Next.js dependencies. Pure TypeScript functions for Vite compatibility.
+ * ============================================================
+ */
+
+import {
+  BookingDetail, ApisInfo, FfnInfo, SsrItem, OrderItemInfo, PenaltyInfo,
+  ServiceOrderItemGroup, PaxServiceGroup, SegmentServiceGroup, ServiceDetail,
+  AllowedPaxChanges, PaxJourneyData,
+  // ⚠️ v3.13.0: Contact Detail Information Type
+  ContactDetail, PhoneDetail, EmailDetail, PostalAddressDetail
+} from '@/types/booking';
+import { getCarrierPaxChangeFeatures, getAllowedActions } from '@/types/pax-change';
+
+// ============================================================
+// Response Types
+// ============================================================
+
+export interface OrderRetrieveResponse {
+  ResultMessage?: {
+    Code: string;
+    Message?: string;
+  };
+  TransactionID: string;
+  Order?: {
+    OrderID: string;
+    // ⚠️ Owner Order in Level absent Exists → OrderItem[0].Ownerimported from
+    Owner?: string;
+    CreatedDate?: string;
+    // ⚠️ BookingReference (NOT BookingReferences), Id (NOT ID)
+    BookingReference?: Array<{
+      Id: string;
+      AirlineID?: string;
+    }>;
+    OrderStatus?: string;
+    OrderTimeLimit?: {
+      PaymentTimeLimitDate?: string;
+      TicketingTimeLimitDate?: string;
+    };
+    PaymentTimeLimit?: string;
+    TicketTimeLimit?: string;
+    TicketDocInfo?: Array<{
+      TicketDocument?: Array<{ TicketDocNbr: string; Type?: string; IssueDate?: string; }>;
+      TicketDocNbr?: string;
+      Type?: string;
+      PaxRefID?: string;
+      IssuedDate?: string;
+    }>;
+    // ⚠️ Partial API to TicketDocList Return
+    TicketDocList?: Array<{
+      TicketDocument?: Array<{ TicketDocNbr: string; Type?: string; IssueDate?: string; }>;
+      TicketDocNbr?: string;
+      Type?: string;
+      PaxRefID?: string;
+      IssuedDate?: string;
+    }>;
+    PaymentList?: Array<{
+      Status?: string;
+      Amount?: number | { Amount: number; CurCode: string };
+    }>;
+    TotalPrice?: {
+      TotalAmount: { Amount: number; CurCode: string };
+      TotalBaseAmount?: { Amount: number; CurCode: string };
+      TotalTaxAmount?: { Amount: number; CurCode: string };
+    };
+    JourneyOverview?: Array<{
+      PaxJourneyRefID: string;
+      PriceClassInfo?: {
+        PriceClass?: string;
+        Code?: string;
+        Name?: string;
+      };
+    }>;
+    OrderItem?: Array<{
+      OrderItemID: string;
+      Owner?: string;
+      StatusCode?: string;
+      PaxRefID?: string[];
+      PaxJourneyRefID?: string[];
+      PaxSegmentRefID?: string[];
+      FareDetail?: Array<{
+        PaxRefID: string[];
+        BaseAmount: { Amount: number; CurCode: string };
+        TaxTotal: { Amount: number; CurCode: string };
+        FareComponent?: Array<{
+          PriceClassRefID?: string;
+          // ⭐ v3.8: Penalty Information (split by before/after departure)
+          Penalty?: {
+            Change?: string; // "true" / "false"
+            Refund?: string; // "true" / "false"
+            Detail?: Array<{
+              Type: string; // "Change" / "Cancel" / "Refund"
+              Application?: { Code?: string }; // "1"=Before Departure, "2"=After Departure
+              // ⚠️ PolarHub: Amounts Array!
+              Amounts?: Array<{
+                CurrencyAmountValue?: number;
+                Code?: string;
+                AmountApplication?: string; // MAX, MIN
+              }>;
+              Description?: string;
+            }>;
+            Description?: string[];
+          };
+        }>;
+        BaggageAllowance?: {
+          BaggageAllowanceRefID?: string;
+        };
+      }>;
+      Price?: {
+        BaseAmount?: { Amount: number; CurCode: string };
+        Taxes?: { TotalAmount?: { Amount: number; CurCode: string } };
+      };
+      Service?: Array<{
+        ServiceID?: string;
+        ServiceDefinitionRefID?: string;
+        PaxRefID?: string;
+        PaxSegmentRefID?: string;
+        Status?: string;
+        SelectedSeat?: { Column: string; Row: string };
+        Definition?: { Name?: string; Desc?: Array<{ Text?: string }> };
+      }>;
+    }>;
+  };
+  // ⚠️ Core: PaxList, PaxSegmentList, PaxJourneyList, OriginDestList DataLists is inside!
+  DataLists?: {
+    PaxList?: Array<{
+      PaxID: string;
+      Ptc: 'ADT' | 'CHD' | 'INF';
+      ContactInfoRefID?: string | string[];
+      Individual?: {
+        Surname: string;
+        GivenName: string[];
+        Birthdate?: string;
+        Gender?: string;
+        NameTitle?: string;
+      };
+      IdentityDoc?: Array<{
+        IdentityDocID?: string;
+        IdentityDocumentNumber?: string; // ⚠️ PolarHub uses this
+        IdentityDocTypeCode?: string;
+        IdentityDocumentType?: string; // ⚠️ PolarHub uses this
+        ExpiryDate?: string;
+        IssuingCountryCode?: string;
+        CitizenshipCountryCode?: string;
+      }>;
+      LoyaltyProgram?: Array<{
+        LoyaltyProgramAccount?: {
+          AccountNumber?: string;
+        };
+        LoyaltyProgramProviderName?: string;
+      }>;
+    }>;
+    PaxJourneyList?: Array<{
+      PaxJourneyID: string;
+      PaxSegmentRefID: string[];
+      OnPoint?: string;
+      OffPoint?: string;
+      FlightTime?: string;
+    }>;
+    PaxSegmentList?: Array<{
+      PaxSegmentID: string;
+      Departure: {
+        AirportCode: string;
+        AirportName?: string;
+        Date: string;
+        Time: string;
+        Terminal?: { Name: string };
+      };
+      Arrival: {
+        AirportCode: string;
+        AirportName?: string;
+        Date: string;
+        Time: string;
+        Terminal?: { Name: string };
+      };
+      MarketingCarrier: {
+        AirlineID: string;
+        FlightNumber: string;
+      };
+      OperatingCarrier?: {
+        AirlineID: string;
+      };
+      CabinType?: {
+        Code: string;
+      };
+      ClassOfService?: {
+        Code: string;
+      };
+      Duration?: string;
+      Status?: string;
+    }>;
+    OriginDestList?: Array<{
+      OriginDestID: string;
+      PaxJourneyRefID: string[];
+    }>;
+    ContactInfoList?: Array<{
+      ContactInfoID: string;
+      // ⚠️ PolarHub: Phone Array, PhoneNumber number Type
+      Phone?: Array<{ CountryDialingCode?: string; PhoneNumber?: number | string }>;
+      // ⚠️ PolarHub: EmailAddress string Array
+      EmailAddress?: string[] | { EmailAddressValue: string };
+    }>;
+    BaggageAllowanceList?: Array<{
+      BaggageAllowanceID: string;
+      PieceAllowance?: { TotalQuantity: number };
+      WeightAllowance?: { MaximumWeight: { Value: number; UOM: string } };
+    }>;
+    ServiceDefinitionList?: Array<{
+      ServiceDefinitionID: string;
+      Name?: string;
+    }>;
+    PriceClassList?: Array<{
+      PriceClassID: string;
+      Code?: string;
+      Name?: string;
+    }>;
+    // ⚠️ Core: TicketDocList and PaymentList DataLists is inside!
+    TicketDocList?: Array<{
+      TicketDocument?: Array<{ TicketDocNbr: string; Type?: string; IssueDate?: string; }>;
+      TicketDocNbr?: string;
+      Type?: string;
+      PaxRefID?: string;
+      IssuedDate?: string;
+    }>;
+    PaymentList?: Array<{
+      PaymentID?: string;
+      Status?: string;
+      // ⚠️ Amount can be a direct number (AF/KL) or nested object depending on carrier
+      Amount?: number | { Amount: number; CurCode: string };
+      CurCode?: string;
+      Method?: string;
+      Type?: string;
+    }>;
+  };
+}
+
+// ============================================================
+// Internal Types
+// ============================================================
+
+interface ServiceChargeItem {
+  label: string;
+  paxName: string;
+  segment: string;
+  amount: number;
+  count?: number;
+}
+
+interface PenaltyAmount {
+  CurrencyAmountValue?: number;
+  Code?: string;
+  AmountApplication?: string; // MAX, MIN
+}
+
+interface PenaltyDetail {
+  Type: string;
+  Amounts?: PenaltyAmount[];
+  Application?: { Code?: string }; // 1=Before departure, 2=After departure
+  Description?: string;
+}
+
+// ============================================================
+// Transform Functions
+// ============================================================
+
+export function transformOrderRetrieveResponse(data: OrderRetrieveResponse): BookingDetail {
+  const order = data.Order;
+  if (!order) {
+    throw new Error('Order not found in response');
+  }
+
+  // ⚠️ Core: from DataLists Data Extract
+  const dataLists = data.DataLists;
+  const paxList = dataLists?.PaxList || [];
+  const paxSegmentList = dataLists?.PaxSegmentList || [];
+  const paxJourneyList = dataLists?.PaxJourneyList || [];
+  const originDestList = dataLists?.OriginDestList || [];
+
+  // ⚠️⚠️⚠️ Core: TicketDocList DataLists is inside! (Order Not)
+  // API Response structure: data.DataLists.TicketDocList (NOT data.Order.TicketDocList)
+  const ticketDocInfoList = dataLists?.TicketDocList || order.TicketDocInfo || order.TicketDocList || [];
+  const hasTickets = ticketDocInfoList.length > 0;
+
+  // ⚠️⚠️⚠️ Important: isPaid Judgment Logic (v3.3 Modify)
+  // ❌ OrderStatus === 'OK' does not mean payment complete! (Hold bookings also return OK)
+  // ✅ isPaid Judgment Criteria:
+  // 1. PaymentList if exists Payment Complete
+  // 2. Ticket if exists Payment Complete (Ticket Ticketing = Payment Required)
+  // ⚠️⚠️⚠️ Core: PaymentList DataLists is inside! (Order Not)
+  // API Response structure: data.DataLists.PaymentList (NOT data.Order.PaymentList)
+  const paymentList = dataLists?.PaymentList || order.PaymentList || [];
+  // ⚠️ AF/KL: PaymentList may contain FOP (Form of Payment) entries with Amount=0
+  // These are available payment methods, NOT actual payments (Status="395")
+  // Filter to only count entries with actual payment amount > 0
+  const hasPaymentList = paymentList.some(p => {
+    const amount = typeof p.Amount === 'number' ? p.Amount
+      : (p.Amount as { Amount?: number } | undefined)?.Amount ?? 0;
+    return amount > 0;
+  });
+  // ⚠️ OrderStatus is irrelevant to payment! Hold bookings also return 'OK', so removed
+  const isPaid = hasPaymentList || hasTickets;
+
+  // Status Judgment Logic:
+  // 1. Ticket if exists TICKETED
+  // 2. If payment is completed, CONFIRMED
+  // 3. Otherwise HD
+  const status = hasTickets ? 'TICKETED' : isPaid ? 'CONFIRMED' : 'HD';
+
+  // ⚠️ Owner: Order.Owner or OrderItem[0].Ownerimported from
+  const carrierCode = order.Owner || order.OrderItem?.[0]?.Owner || 'SQ';
+
+  // ⚠️ PNR: BookingReference (NOT BookingReferences), Id (NOT ID)
+  const pnr = order.BookingReference?.[0]?.Id || '';
+
+  // Build contact info map from DataLists
+  const contactInfoMap = new Map(
+    (dataLists?.ContactInfoList || []).map(ci => [ci.ContactInfoID, ci])
+  );
+
+  // Build baggage allowance map
+  const baggageMap = new Map(
+    (dataLists?.BaggageAllowanceList || []).map(ba => [ba.BaggageAllowanceID, ba])
+  );
+
+  // Build service definition map
+  const serviceDefMap = new Map(
+    (dataLists?.ServiceDefinitionList || []).map(sd => [sd.ServiceDefinitionID, sd])
+  );
+
+  // Build price class map from JourneyOverview (more reliable)
+  const journeyPriceClassMap = new Map(
+    (order.JourneyOverview || []).map(jo => [jo.PaxJourneyRefID, jo.PriceClassInfo])
+  );
+
+  // Transform passengers with extended info
+  const passengers = paxList.map((pax) => {
+    // Try to get contact info from DataLists
+    // ⚠️ ContactInfoRefID can be string or array
+    // ⚠️ PolarHub may split Phone and Email into separate ContactInfo entries
+    const contactRefIds = Array.isArray(pax.ContactInfoRefID)
+      ? pax.ContactInfoRefID
+      : pax.ContactInfoRefID ? [pax.ContactInfoRefID] : [];
+
+    // ⚠️ v3.13.0: Build contactDetails array with RefID mapping
+    const contactDetails: ContactDetail[] = [];
+
+    // Merge all contact infos (phone and email may be in different entries)
+    let mergedPhone: { CountryDialingCode?: string; PhoneNumber?: number | string } | undefined;
+    let mergedEmail: string | undefined;
+
+    for (const refId of contactRefIds) {
+      const ci = contactInfoMap.get(refId);
+      if (ci) {
+        // ⚠️ v3.13.0: Build ContactDetail for this RefID
+        const phones: PhoneDetail[] = [];
+        const emails: EmailDetail[] = [];
+        const postalAddresses: PostalAddressDetail[] = [];
+
+        // Extract phones
+        if (ci.Phone && Array.isArray(ci.Phone)) {
+          ci.Phone.forEach((phone: { CountryDialingCode?: string; PhoneNumber?: number | string }) => {
+            const phoneNumber = String(phone.PhoneNumber || '');
+            const countryCode = phone.CountryDialingCode ? String(phone.CountryDialingCode) : undefined;
+            phones.push({
+              phoneNumber,
+              countryDialingCode: countryCode,
+              formatted: countryCode ? `+${countryCode}-${phoneNumber}` : phoneNumber,
+            });
+          });
+        }
+
+        // Extract emails
+        if (ci.EmailAddress) {
+          if (Array.isArray(ci.EmailAddress)) {
+            ci.EmailAddress.forEach((email: string) => {
+              emails.push({ emailAddress: email });
+            });
+          } else if (typeof ci.EmailAddress === "object" && "EmailAddressValue" in ci.EmailAddress) {
+            emails.push({ emailAddress: ci.EmailAddress.EmailAddressValue });
+          }
+        }
+
+        // Extract postal addresses (type assertion for optional field)
+        const ciAny = ci as Record<string, unknown>;
+        if (ciAny.PostalAddress && Array.isArray(ciAny.PostalAddress)) {
+          (ciAny.PostalAddress as Array<{ Street?: string[]; CityName?: string; PostalCode?: string; CountryCode?: string }>).forEach((addr) => {
+            postalAddresses.push({
+              street: addr.Street,
+              cityName: addr.CityName,
+              postalCode: addr.PostalCode,
+              countryCode: addr.CountryCode,
+            });
+          });
+        }
+
+        // Add to contactDetails
+        contactDetails.push({
+          contactInfoId: refId,
+          phones,
+          emails,
+          postalAddresses: postalAddresses.length > 0 ? postalAddresses : undefined,
+        });
+
+        // Get phone from first entry that has it (backward compatibility)
+        if (!mergedPhone && ci.Phone && ci.Phone.length > 0) {
+          mergedPhone = ci.Phone[0];
+        }
+        // Get email from first entry that has it (backward compatibility)
+        if (!mergedEmail && ci.EmailAddress) {
+          if (Array.isArray(ci.EmailAddress) && ci.EmailAddress.length > 0) {
+            mergedEmail = ci.EmailAddress[0];
+          } else if (!Array.isArray(ci.EmailAddress) && typeof ci.EmailAddress === "object" && "EmailAddressValue" in ci.EmailAddress) {
+            mergedEmail = ci.EmailAddress.EmailAddressValue;
+          }
+        }
+      }
+    }
+
+    // Extract APIS info (passport)
+    // ⚠️ PolarHub uses IdentityDocumentType (not IdentityDocTypeCode)
+    const passportDoc = pax.IdentityDoc?.find(doc =>
+      doc.IdentityDocumentType === 'PT' || doc.IdentityDocumentType === 'PP' ||
+      doc.IdentityDocTypeCode === 'PT' || doc.IdentityDocTypeCode === 'PP'
+    );
+    const apisInfo: ApisInfo | undefined = passportDoc ? {
+      passportNumber: passportDoc.IdentityDocumentNumber || passportDoc.IdentityDocID || '',
+      nationality: passportDoc.CitizenshipCountryCode || passportDoc.IssuingCountryCode || '',
+      expiryDate: passportDoc.ExpiryDate || '',
+    } : undefined;
+
+    // Extract FFN info (loyalty program)
+    const loyaltyInfo = pax.LoyaltyProgram?.[0];
+    const ffn: FfnInfo | undefined = loyaltyInfo?.LoyaltyProgramAccount?.AccountNumber ? {
+      programCode: loyaltyInfo.LoyaltyProgramProviderName || carrierCode,
+      memberNumber: loyaltyInfo.LoyaltyProgramAccount.AccountNumber,
+    } : undefined;
+
+    return {
+      paxId: pax.PaxID,
+      ptc: pax.Ptc,
+      ptcLabel: getPtcLabel(pax.Ptc),
+      title: pax.Individual?.NameTitle,
+      fullName: `${pax.Individual?.Surname}/${pax.Individual?.GivenName?.join(' ')}`,
+      property: pax.Individual?.Surname || '',
+      givenName: pax.Individual?.GivenName?.join(' ') || '',
+      birthdate: pax.Individual?.Birthdate,
+      gender: pax.Individual?.Gender as 'MALE' | 'FEMALE' | undefined,
+      // Using merged contact info from multiple ContactInfo entries
+      mobile: mergedPhone?.PhoneNumber
+        ? (mergedPhone.CountryDialingCode ? `+${mergedPhone.CountryDialingCode}-` : '') + String(mergedPhone.PhoneNumber)
+        : undefined,
+      email: mergedEmail,
+      ticketNumber: ticketDocInfoList.find(t => t.PaxRefID === pax.PaxID)?.TicketDocument?.[0]?.TicketDocNbr || ticketDocInfoList.find(t => t.PaxRefID === pax.PaxID)?.TicketDocNbr,
+      apisInfo,
+      ffn,
+      // ⚠️ NDC Spec section 4.2: OrderViewRS's Existing ContactInfoRefID List (AY Contact when ADD Required!)
+      contactInfoRefIds: contactRefIds,
+      // ⚠️ v3.13.0: Contact Detail Information (multiple items's Contact/Email Support)
+      contactDetails: contactDetails.length > 0 ? contactDetails : undefined,
+    };
+  });
+
+  // Transform itineraries
+  const paxSegmentMap = new Map(
+    paxSegmentList.map(seg => [seg.PaxSegmentID, seg])
+  );
+
+  // Find baggage info for segments from OrderItem
+  const segmentBaggageMap = new Map<string, string>();
+  (order.OrderItem || []).forEach(item => {
+    const baggageRefId = item.FareDetail?.[0]?.BaggageAllowance?.BaggageAllowanceRefID;
+    if (baggageRefId) {
+      const baggageInfo = baggageMap.get(baggageRefId);
+      const baggageStr = formatBaggage(baggageInfo);
+      // PaxSegmentRefID or PaxJourneyRefID Through Segment Connection
+      const segmentIds = item.PaxSegmentRefID || [];
+      const journeyIds = item.PaxJourneyRefID || [];
+
+      // Direct segment refs
+      segmentIds.forEach(segId => {
+        if (!segmentBaggageMap.has(segId)) {
+          segmentBaggageMap.set(segId, baggageStr);
+        }
+      });
+
+      // Journey refs → segment refs
+      journeyIds.forEach(journeyId => {
+        const journey = paxJourneyList.find(j => j.PaxJourneyID === journeyId);
+        journey?.PaxSegmentRefID.forEach(segId => {
+          if (!segmentBaggageMap.has(segId)) {
+            segmentBaggageMap.set(segId, baggageStr);
+          }
+        });
+      });
+    }
+  });
+
+  // Find price class for segments from JourneyOverview
+  const segmentPriceClassMap = new Map<string, string>();
+  (order.JourneyOverview || []).forEach(jo => {
+    const priceClassName = jo.PriceClassInfo?.Name || jo.PriceClassInfo?.Code || '';
+    const journey = paxJourneyList.find(j => j.PaxJourneyID === jo.PaxJourneyRefID);
+    journey?.PaxSegmentRefID.forEach(segId => {
+      if (!segmentPriceClassMap.has(segId)) {
+        segmentPriceClassMap.set(segId, priceClassName);
+      }
+    });
+  });
+
+  // Suppress unused variable warning
+  void journeyPriceClassMap;
+
+  // ⚠️ If OriginDestList is absent, use PaxJourneyList as fallback
+  const effectiveOriginDest = originDestList.length > 0
+    ? originDestList
+    : paxJourneyList.map((j, idx) => ({
+      OriginDestID: `OD${idx + 1}`,
+      PaxJourneyRefID: [j.PaxJourneyID],
+    }));
+
+  const itineraries = effectiveOriginDest.map((od, idx) => {
+    const journeys = paxJourneyList.filter(j =>
+      od.PaxJourneyRefID.includes(j.PaxJourneyID)
+    );
+
+    const segments = journeys.flatMap(j =>
+      j.PaxSegmentRefID.map(segId => paxSegmentMap.get(segId)).filter(Boolean)
+    ) as typeof paxSegmentList;
+
+    return {
+      journeyId: od.OriginDestID,
+      direction: idx === 0 ? 'outbound' : 'inbound' as 'outbound' | 'inbound',
+      directionLabel: idx === 0 ? 'Outbound' : 'Return',
+      segments: segments.map((seg, segIdx) => ({
+        segmentId: seg.PaxSegmentID,
+        segmentNo: segIdx + 1,
+        carrierCode: seg.MarketingCarrier.AirlineID,
+        flightNumber: `${seg.MarketingCarrier.AirlineID}${seg.MarketingCarrier.FlightNumber}`,
+        departure: {
+          airport: seg.Departure.AirportCode,
+          airportName: seg.Departure.AirportName,
+          date: seg.Departure.Date,
+          time: seg.Departure.Time.substring(0, 5),
+          terminal: seg.Departure.Terminal?.Name,
+        },
+        arrival: {
+          airport: seg.Arrival.AirportCode,
+          airportName: seg.Arrival.AirportName,
+          date: seg.Arrival.Date,
+          time: seg.Arrival.Time.substring(0, 5),
+          terminal: seg.Arrival.Terminal?.Name,
+        },
+        duration: seg.Duration,
+        cabinClass: getCabinLabel(seg.CabinType?.Code),
+        cabinCode: seg.CabinType?.Code,
+        bookingClass: seg.ClassOfService?.Code,
+        priceClass: segmentPriceClassMap.get(seg.PaxSegmentID),
+        baggage: segmentBaggageMap.get(seg.PaxSegmentID),
+        status: seg.Status || 'HK',
+        statusLabel: getSegmentStatusLabel(seg.Status || 'HK'),
+        isCodeShare: seg.OperatingCarrier?.AirlineID !== seg.MarketingCarrier.AirlineID,
+        operatingCarrier: seg.OperatingCarrier?.AirlineID,
+      })),
+    };
+  });
+
+  // ============================================================
+  // ⭐ Transform price - Air ticket/Service Fare Split
+  // ============================================================
+  const totalPrice = order.TotalPrice;
+
+  // Ancillary service Fee Extract (serviceCharges)
+  // Service exists All from OrderItem Service Price Extract
+  const serviceCharges: ServiceChargeItem[] = (order.OrderItem || []).flatMap(item => {
+    const services = item.Service || [];
+    if (services.length === 0) return [];
+
+    // ⚠️ Service OrderItem's Price in FareDetail Exists (Price Not!)
+    // Service FareDetail characteristic: PaxRefID empty or absent
+    const serviceFareDetail = item.FareDetail?.find(fd =>
+      !fd.PaxRefID || fd.PaxRefID.length === 0
+    );
+
+    // Extract price from FareDetail (1st priority), from Price (2nd priority)
+    const itemPrice = serviceFareDetail?.BaseAmount?.Amount || item.Price?.BaseAmount?.Amount || 0;
+    const itemTaxes = serviceFareDetail?.TaxTotal?.Amount || item.Price?.Taxes?.TotalAmount?.Amount || 0;
+    const totalServicePrice = itemPrice + itemTaxes;
+
+    // Free service if no price (includes bundles)
+    if (totalServicePrice === 0) return [];
+
+    // Per-service price (evenly distributed)
+    const pricePerService = totalServicePrice / services.length;
+
+    return services.map(service => {
+      const serviceDef = serviceDefMap.get(service.ServiceDefinitionRefID || '');
+      const paxId = service.PaxRefID || item.PaxRefID?.[0] || '';
+      const pax = paxList.find(p => p.PaxID === paxId);
+      const segmentId = service.PaxSegmentRefID || item.PaxSegmentRefID?.[0];
+      const segment = segmentId ? paxSegmentMap.get(segmentId) : null;
+
+      const segmentStr = segment
+        ? `${segment.Departure.AirportCode}-${segment.Arrival.AirportCode}`
+        : '';
+
+      // Service Name Extract: Definition.Name > ServiceDefinitionList > ServiceID
+      // Seat's Case Seat Number Include
+      const seatInfo = service.SelectedSeat
+        ? `${service.SelectedSeat.Row}${service.SelectedSeat.Column} `
+        : '';
+      const serviceName = service.Definition?.Name || serviceDef?.Name || service.ServiceID || 'Service';
+
+      return {
+        label: `${seatInfo}${serviceName}`,
+        paxName: pax
+          ? `${pax.Individual?.Surname}/${pax.Individual?.GivenName?.join(' ')}`
+          : paxId,
+        segment: segmentStr,
+        amount: pricePerService,
+      };
+    });
+  });
+
+  // Service Total Amount Calculate
+  const serviceTotalAmount = serviceCharges.reduce((sum, sc) => sum + sc.amount, 0);
+  void serviceTotalAmount;
+
+  // Air ticket Fare Extract (passengerBreakdown)
+  // FareDetail existsand PaxRefID exists Item only (Service only exists OrderItem Exclude)
+  const passengerBreakdown = (order.OrderItem || []).flatMap(item => {
+    // Exclude cases where only service exists but FareDetail absent or Amount is 0
+    const hasFareDetail = item.FareDetail && item.FareDetail.length > 0;
+
+    if (!hasFareDetail) return [];
+
+    return item.FareDetail!.flatMap(fd => {
+      // Exclude if PaxRefID absent or empty
+      if (!fd.PaxRefID || fd.PaxRefID.length === 0) return [];
+      // Exclude if Amount is 0 (service bundles, etc.)
+      if (fd.BaseAmount.Amount === 0) return [];
+
+      return [{
+        ptc: paxList.find(p => fd.PaxRefID.includes(p.PaxID))?.Ptc || 'ADT',
+        ptcLabel: getPtcLabel(paxList.find(p => fd.PaxRefID.includes(p.PaxID))?.Ptc || 'ADT'),
+        count: fd.PaxRefID.length,
+        baseFare: fd.BaseAmount.Amount,
+        taxes: fd.TaxTotal.Amount,
+        subtotal: fd.BaseAmount.Amount + fd.TaxTotal.Amount,
+      }];
+    });
+  });
+
+  // Air ticket Fare Total Calculate
+  const flightBaseFare = passengerBreakdown.reduce((sum, pb) => sum + pb.baseFare * pb.count, 0);
+  const flightTaxes = passengerBreakdown.reduce((sum, pb) => sum + pb.taxes * pb.count, 0);
+
+  const price = {
+    currency: totalPrice?.TotalAmount.CurCode || 'KRW',
+    totalAmount: totalPrice?.TotalAmount.Amount || 0,
+    // Air ticket Fare only Display (Service Exclude)
+    baseFare: flightBaseFare || totalPrice?.TotalBaseAmount?.Amount || 0,
+    taxes: flightTaxes || totalPrice?.TotalTaxAmount?.Amount || 0,
+    passengerBreakdown,
+    formattedTotal: `${(totalPrice?.TotalAmount.Amount || 0).toLocaleString()} ${totalPrice?.TotalAmount.CurCode || 'KRW'}`,
+  };
+
+  // Transform tickets
+  // ⚠️ Type ticket.Type not ticket.TicketDocument[0].in Type Exists!
+  // Type Value: "T"=Air ticket, "J"=EMD-A, "Y"=EMD-S, "INF"=Infant Air ticket
+  const tickets = ticketDocInfoList.map((ticket) => {
+    const ticketDoc = ticket.TicketDocument?.[0];
+    const ticketType = ticketDoc?.Type || 'T';
+
+    // Type Code → standard type conversion
+    const type: 'TICKET' | 'EMD-A' | 'EMD-S' =
+      ticketType === 'J' ? 'EMD-A' :
+      ticketType === 'Y' ? 'EMD-S' :
+      'TICKET';
+
+    // Type Code → Korean Label Conversion
+    const typeLabel =
+      ticketType === 'J' ? 'EMD-A (Ancillary service)' :
+      ticketType === 'Y' ? 'EMD-S' :
+      ticketType === 'INF' ? 'Infant Air ticket' :
+      'Air ticket';
+
+    return {
+      ticketNumber: ticketDoc?.TicketDocNbr || ticket.TicketDocNbr || '',
+      type,
+      typeLabel,
+      paxId: ticket.PaxRefID || '',
+      passengerName: paxList.find(p => p.PaxID === ticket.PaxRefID)
+        ? `${paxList.find(p => p.PaxID === ticket.PaxRefID)?.Individual?.Surname}/${paxList.find(p => p.PaxID === ticket.PaxRefID)?.Individual?.GivenName?.join(' ')}`
+        : '',
+      issuedDate: ticketDoc?.IssueDate || ticket.IssuedDate,
+    };
+  });
+
+  // ============================================================
+  // ⭐ v3.9: Build ancillary service hierarchical structure (OrderItem → Pax → Segment)
+  // ============================================================
+
+  // Infer service type
+  function inferServiceType(serviceName: string, serviceId: string): 'SEAT' | 'BAGGAGE' | 'MEAL' | 'LOUNGE' | 'OTHER' {
+    const name = (serviceName || serviceId || '').toLowerCase();
+    if (name.includes('seat') || name.includes('Seat')) return 'SEAT';
+    if (name.includes('baggage') || name.includes('bag') || name.includes('Baggage')) return 'BAGGAGE';
+    if (name.includes('meal') || name.includes('food') || name.includes('in-flight meal')) return 'MEAL';
+    if (name.includes('lounge') || name.includes('lounge')) return 'LOUNGE';
+    return 'OTHER';
+  }
+
+  // Filter service OrderItems only
+  const serviceOrderItems = (order.OrderItem || []).filter(item => item.Service && item.Service.length > 0);
+
+  // ⭐ Build hierarchical structure: ServiceOrderItemGroup[]
+  const serviceGroups: ServiceOrderItemGroup[] = serviceOrderItems.map(item => {
+    // OrderItem's Price Information
+    const serviceFareDetail = item.FareDetail?.find(fd => !fd.PaxRefID || fd.PaxRefID.length === 0);
+    const itemPrice = serviceFareDetail?.BaseAmount?.Amount || item.Price?.BaseAmount?.Amount || 0;
+    const itemTaxes = serviceFareDetail?.TaxTotal?.Amount || item.Price?.Taxes?.TotalAmount?.Amount || 0;
+    const totalPriceVal = itemPrice + itemTaxes;
+    const currency = serviceFareDetail?.BaseAmount?.CurCode || item.Price?.BaseAmount?.CurCode || 'KRW';
+
+    // to per Pax Groupconversion
+    const paxServiceMap = new Map<string, { pax: typeof paxList[0] | undefined; services: Map<string, typeof item.Service> }>();
+
+    (item.Service || []).forEach(service => {
+      const paxId = service.PaxRefID || item.PaxRefID?.[0] || '';
+      const segmentId = service.PaxSegmentRefID || item.PaxSegmentRefID?.[0] || '';
+
+      if (!paxServiceMap.has(paxId)) {
+        const pax = paxList.find(p => p.PaxID === paxId);
+        paxServiceMap.set(paxId, { pax, services: new Map() });
+      }
+
+      const paxEntry = paxServiceMap.get(paxId)!;
+      if (!paxEntry.services.has(segmentId)) {
+        paxEntry.services.set(segmentId, []);
+      }
+      paxEntry.services.get(segmentId)!.push(service);
+    });
+
+    // PaxServiceGroup[] Build
+    const paxGroups: PaxServiceGroup[] = Array.from(paxServiceMap.entries()).map(([paxId, { pax, services }]) => {
+      // SegmentServiceGroup[] Build
+      const segGroups: SegmentServiceGroup[] = Array.from(services.entries()).map(([segmentId, segServices]) => {
+        const segment = paxSegmentMap.get(segmentId);
+
+        // ServiceDetail[] Build
+        const serviceDetails: ServiceDetail[] = (segServices || []).map(service => {
+          const serviceDef = serviceDefMap.get(service.ServiceDefinitionRefID || '');
+          const serviceName = service.Definition?.Name || serviceDef?.Name || service.ServiceID || 'Service';
+          const serviceType = inferServiceType(serviceName, service.ServiceID || '');
+
+          // Seat Information
+          const seatInfo = service.SelectedSeat ? {
+            row: service.SelectedSeat.Row,
+            column: service.SelectedSeat.Column,
+            seatNumber: `${service.SelectedSeat.Row}${service.SelectedSeat.Column}`,
+          } : undefined;
+
+          // Description Extract
+          const description = service.Definition?.Desc?.map(d => d.Text).filter(Boolean).join(' ') || undefined;
+
+          return {
+            serviceId: service.ServiceID || '',
+            serviceDefinitionRefId: service.ServiceDefinitionRefID,
+            serviceName: seatInfo ? `${serviceName} ${seatInfo.seatNumber}` : serviceName,
+            serviceType,
+            description,
+            seatInfo,
+            status: service.Status || item.StatusCode || 'HK',
+            statusLabel: getSsrStatusLabel(service.Status || item.StatusCode || 'HK'),
+          };
+        });
+
+        return {
+          segmentId,
+          segmentLabel: segment ? `${segment.Departure.AirportCode} → ${segment.Arrival.AirportCode}` : segmentId,
+          departureAirport: segment?.Departure.AirportCode || '',
+          arrivalAirport: segment?.Arrival.AirportCode || '',
+          flightNumber: segment ? `${segment.MarketingCarrier.AirlineID}${segment.MarketingCarrier.FlightNumber}` : undefined,
+          services: serviceDetails,
+        };
+      });
+
+      return {
+        paxId,
+        paxName: pax ? `${pax.Individual?.Surname}/${pax.Individual?.GivenName?.join(' ')}` : paxId,
+        ptc: pax?.Ptc || 'ADT',
+        ptcLabel: getPtcLabel(pax?.Ptc || 'ADT'),
+        segments: segGroups,
+      };
+    });
+
+    return {
+      orderItemId: item.OrderItemID,
+      owner: item.Owner,
+      statusCode: item.StatusCode,
+      statusLabel: getSsrStatusLabel(item.StatusCode || 'HK'),
+      totalPrice: totalPriceVal > 0 ? { amount: totalPriceVal, currency } : undefined,
+      passengers: paxGroups,
+    };
+  });
+
+  // ⭐ Also maintain existing ssrList (compatible)
+  const ssrList: SsrItem[] = serviceOrderItems.flatMap(item => {
+    return (item.Service || []).map(service => {
+      const serviceDef = serviceDefMap.get(service.ServiceDefinitionRefID || '');
+      const paxId = service.PaxRefID || item.PaxRefID?.[0] || '';
+      const pax = paxList.find(p => p.PaxID === paxId);
+
+      let segmentIds = item.PaxSegmentRefID || [];
+      if (segmentIds.length === 0 && item.PaxJourneyRefID) {
+        item.PaxJourneyRefID.forEach(journeyId => {
+          const journey = paxJourneyList.find(j => j.PaxJourneyID === journeyId);
+          if (journey) segmentIds = segmentIds.concat(journey.PaxSegmentRefID);
+        });
+      }
+
+      const segments = segmentIds.map(id => paxSegmentMap.get(id)).filter(Boolean);
+      const segmentStr = segments.length > 0
+        ? `${segments[0]?.Departure.AirportCode}-${segments[segments.length - 1]?.Arrival.AirportCode}`
+        : '';
+
+      const seatInfo = service.SelectedSeat ? ` ${service.SelectedSeat.Row}${service.SelectedSeat.Column}` : '';
+      const serviceName = service.Definition?.Name || serviceDef?.Name || service.ServiceID || 'Service';
+
+      return {
+        paxId,
+        paxName: pax ? `${pax.Individual?.Surname}/${pax.Individual?.GivenName?.join(' ')} (${pax.Ptc})` : paxId,
+        segment: segmentStr,
+        ssrName: `${serviceName}${seatInfo}`,
+        status: item.StatusCode || 'HK',
+        statusLabel: getSsrStatusLabel(item.StatusCode || 'HK'),
+      };
+    });
+  });
+
+  const hasPendingSsr = ssrList.some(ssr => ssr.status === 'HD') ||
+    serviceGroups.some(g => g.passengers.some(p => p.segments.some(s => s.services.some(svc => svc.status === 'HD'))));
+
+  // OCN agree button for AF/KL airlines only
+  const showOcnAgreeButton = ['AF', 'KL'].includes(carrierCode);
+
+  // Determine available actions
+  // ⚠️ isPaid Add: TR, etc. after Payment Ticket absent Carrier Handling
+  const actions = getActionState(carrierCode, hasTickets ?? false, isPaid, status);
+
+  return {
+    orderId: order.OrderID,
+    pnr,
+    carrierCode,
+    carrierName: getCarrierName(carrierCode),
+    status: status as 'HD' | 'CONFIRMED' | 'TICKETED' | 'CANCELLED',
+    statusLabel: getStatusLabel(status),
+    // TimeLimit: OrderTimeLimit or Directly Field
+    paymentTimeLimit: order.OrderTimeLimit?.PaymentTimeLimitDate || order.PaymentTimeLimit,
+    ticketingTimeLimit: order.OrderTimeLimit?.TicketingTimeLimitDate || order.TicketTimeLimit,
+    isTicketed: hasTickets,
+    // ⚠️ isPaid Add: TR, etc. after Payment Ticket absent Carrier Handling
+    isPaid,
+    createdAt: order.CreatedDate,
+
+    passengers,
+    itineraries,
+    price,
+    // ⭐ Ancillary service Fee Split
+    serviceCharges: serviceCharges.length > 0 ? serviceCharges : undefined,
+    tickets,
+
+    // SSR info - ⭐ v3.9 Enhanced
+    ssrList: ssrList.length > 0 ? ssrList : undefined,
+    serviceGroups: serviceGroups.length > 0 ? serviceGroups : undefined,
+    hasPendingSsr,
+
+    // OCN info (empty for now - would need OCN API call)
+    showOcnAgreeButton,
+
+    actions,
+
+    // ⭐ v3.6: penalty Information
+    penaltyInfo: extractPenaltyInfo(order.OrderItem || []),
+
+    // ⭐ v3.10: Passenger information Change Available Item
+    allowedPaxChanges: getAllowedPaxChanges(carrierCode, hasTickets, isPaid),
+
+    _orderData: {
+      transactionId: data.TransactionID,
+      orderId: order.OrderID,
+      owner: carrierCode,
+      orderItemIds: (order.OrderItem || []).map(item => item.OrderItemID),
+      // ⭐ v3.5: OrderItem Detail Information (Air ticket/Service Distinction)
+      orderItems: buildOrderItems(order.OrderItem || [], paxList, paxSegmentMap, serviceDefMap),
+      // v3.24: PaxJourney-based data for Journey Change
+      paxJourneys: buildPaxJourneyData(paxJourneyList, order.OrderItem || []),
+    },
+  };
+}
+
+// ============================================================
+// ⭐ v3.5: OrderItem Detail Information Build
+// ============================================================
+
+function buildOrderItems(
+  orderItems: Array<{
+    OrderItemID: string;
+    Owner?: string;
+    StatusCode?: string;
+    PaxRefID?: string[];
+    PaxJourneyRefID?: string[];
+    PaxSegmentRefID?: string[];
+    FareDetail?: Array<{ PaxRefID: string[]; BaseAmount: { Amount: number; CurCode: string }; TaxTotal: { Amount: number } }>;
+    Service?: Array<{
+      ServiceID?: string;
+      ServiceDefinitionRefID?: string;
+      PaxRefID?: string;
+      PaxSegmentRefID?: string;
+      SelectedSeat?: { Row: string; Column: string };
+      Definition?: { Name?: string };
+    }>;
+    Price?: { BaseAmount?: { Amount: number; CurCode?: string } };
+  }>,
+  paxList: Array<{ PaxID: string }>,
+  paxSegmentMap: Map<string, { Departure: { AirportCode: string }; Arrival: { AirportCode: string } }>,
+  serviceDefMap: Map<string, { Name?: string }>
+): OrderItemInfo[] {
+  return orderItems.map(item => {
+    const hasService = item.Service && item.Service.length > 0;
+    const hasFareDetailWithPax = item.FareDetail?.some(fd => fd.PaxRefID && fd.PaxRefID.length > 0);
+
+    // Air ticket vs Service Distinction
+    // - Air ticket: FareDetail.PaxRefID Exists
+    // - Service: Service Array existsand, FareDetail.PaxRefID absent거나 Empty array
+    const type: 'FLIGHT' | 'SERVICE' = hasService && !hasFareDetailWithPax ? 'SERVICE' : 'FLIGHT';
+
+    const orderItemInfo: OrderItemInfo = {
+      orderItemId: item.OrderItemID,
+      type,
+      owner: item.Owner,
+      statusCode: item.StatusCode,
+      paxRefIds: item.PaxRefID || [],
+      paxSegmentRefIds: item.PaxSegmentRefID || [],
+      paxJourneyRefIds: item.PaxJourneyRefID || [],
+    };
+
+    if (type === 'FLIGHT' && item.FareDetail && item.FareDetail.length > 0) {
+      const fd = item.FareDetail.find(f => f.PaxRefID && f.PaxRefID.length > 0);
+      if (fd) {
+        orderItemInfo.fareInfo = {
+          baseFare: fd.BaseAmount.Amount,
+          taxes: fd.TaxTotal.Amount,
+          total: fd.BaseAmount.Amount + fd.TaxTotal.Amount,
+          currency: fd.BaseAmount.CurCode,
+        };
+      }
+    }
+
+    if (type === 'SERVICE' && hasService) {
+      const service = item.Service![0];
+      const serviceDef = serviceDefMap.get(service.ServiceDefinitionRefID || '');
+      const serviceFareDetail = item.FareDetail?.find(fd => !fd.PaxRefID || fd.PaxRefID.length === 0);
+      const servicePrice = serviceFareDetail?.BaseAmount?.Amount || item.Price?.BaseAmount?.Amount || 0;
+      const currency = serviceFareDetail?.BaseAmount?.CurCode || item.Price?.BaseAmount?.CurCode || 'KRW';
+
+      orderItemInfo.serviceInfo = {
+        serviceId: service.ServiceID || '',
+        serviceName: service.Definition?.Name || serviceDef?.Name || service.ServiceID || 'Service',
+        serviceDefinitionRefId: service.ServiceDefinitionRefID,
+        price: servicePrice,
+        currency,
+      };
+
+      if (service.SelectedSeat) {
+        orderItemInfo.serviceInfo.seatInfo = {
+          row: service.SelectedSeat.Row,
+          column: service.SelectedSeat.Column,
+        };
+      }
+    }
+
+    // Suppress unused variable warning
+    void paxList;
+    void paxSegmentMap;
+
+    return orderItemInfo;
+  });
+}
+
+// ============================================================
+// v3.24: PaxJourney data for Journey Change
+// ============================================================
+
+function buildPaxJourneyData(
+  paxJourneyList: Array<{ PaxJourneyID: string; PaxSegmentRefID: string[]; FlightTime?: string }>,
+  orderItems: Array<{
+    OrderItemID: string;
+    PaxJourneyRefID?: string[];
+    Service?: Array<{ ServiceID?: string; PaxSegmentRefID?: string }>;
+  }>
+): PaxJourneyData[] {
+  // Build segment-to-serviceIds map from all OrderItems
+  const segmentServiceMap = new Map<string, string[]>();
+  for (const item of orderItems) {
+    for (const service of (item.Service || [])) {
+      const segId = service.PaxSegmentRefID;
+      if (segId && service.ServiceID) {
+        const existing = segmentServiceMap.get(segId) || [];
+        existing.push(service.ServiceID);
+        segmentServiceMap.set(segId, existing);
+      }
+    }
+  }
+
+  // Build journey-to-orderItemId map
+  const journeyOrderItemMap = new Map<string, string>();
+  for (const item of orderItems) {
+    for (const journeyId of (item.PaxJourneyRefID || [])) {
+      journeyOrderItemMap.set(journeyId, item.OrderItemID);
+    }
+  }
+
+  // Fallback: If PaxJourneyRefID is empty, map via Service.PaxSegmentRefID
+  if (journeyOrderItemMap.size === 0) {
+    const segmentOrderItemMap = new Map<string, string>();
+    for (const item of orderItems) {
+      for (const service of (item.Service || [])) {
+        if (service.PaxSegmentRefID) {
+          segmentOrderItemMap.set(service.PaxSegmentRefID, item.OrderItemID);
+        }
+      }
+    }
+    for (const journey of paxJourneyList) {
+      for (const segId of journey.PaxSegmentRefID) {
+        const orderItemId = segmentOrderItemMap.get(segId);
+        if (orderItemId && !journeyOrderItemMap.has(journey.PaxJourneyID)) {
+          journeyOrderItemMap.set(journey.PaxJourneyID, orderItemId);
+          break;
+        }
+      }
+    }
+  }
+
+  return paxJourneyList.map(journey => {
+    const serviceIds: string[] = [];
+    for (const segId of journey.PaxSegmentRefID) {
+      const services = segmentServiceMap.get(segId) || [];
+      serviceIds.push(...services);
+    }
+
+    const journeyAny = journey as Record<string, unknown>;
+
+    return {
+      paxJourneyId: journey.PaxJourneyID,
+      onPoint: (journeyAny.OnPoint as string) || '',
+      offPoint: (journeyAny.OffPoint as string) || '',
+      flightTime: (journeyAny.FlightTime as string) || journey.FlightTime,
+      paxSegmentRefIds: journey.PaxSegmentRefID,
+      serviceIds,
+      orderItemId: journeyOrderItemMap.get(journey.PaxJourneyID) || '',
+    };
+  });
+}
+
+// ============================================================
+// Helper Functions
+// ============================================================
+
+function getStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    HD: 'BookingPending',
+    CONFIRMED: 'BookingComplete',
+    TICKETED: 'TicketingComplete',
+    CANCELLED: 'Cancellation',
+  };
+  return map[status] || status;
+}
+
+function getSegmentStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    HK: 'Confirmed',
+    HD: 'ConfirmedPending',
+    HI: 'IssueComplete',
+    HN: 'ResponsePending',
+    TK: 'TicketComplete',
+    XX: 'Cancellation',
+  };
+  return map[status] || status;
+}
+
+function getPtcLabel(ptc: string): string {
+  const map: Record<string, string> = {
+    ADT: 'Adult',
+    CHD: 'Child',
+    INF: 'Infant',
+  };
+  return map[ptc] || ptc;
+}
+
+function getCabinLabel(cabinCode?: string): string {
+  const map: Record<string, string> = {
+    Y: 'Economy',
+    W: 'Premium Economy',
+    C: 'Business',
+    F: 'First class',
+  };
+  return cabinCode ? map[cabinCode] || cabinCode : 'Economy';
+}
+
+function getSsrStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    HK: 'Confirmed',
+    HD: 'ConfirmedPending',
+    HI: 'IssueComplete',
+    HN: 'ResponsePending',
+  };
+  return map[status] || status;
+}
+
+function formatBaggage(baggageInfo?: {
+  PieceAllowance?: { TotalQuantity: number };
+  WeightAllowance?: { MaximumWeight: { Value: number; UOM: string } };
+}): string {
+  if (!baggageInfo) return '';
+
+  if (baggageInfo.PieceAllowance?.TotalQuantity) {
+    return `${baggageInfo.PieceAllowance.TotalQuantity}PC`;
+  }
+
+  if (baggageInfo.WeightAllowance?.MaximumWeight) {
+    const { Value, UOM } = baggageInfo.WeightAllowance.MaximumWeight;
+    return `${Value}${UOM}`;
+  }
+
+  return '';
+}
+
+// ============================================================
+// ⭐ v3.8: Extract penalty information (split by before/after departure fees)
+// ============================================================
+
+function extractFeeRange(amounts: PenaltyAmount[] | undefined): { min: number; max: number; currency: string } | null {
+  if (!amounts || amounts.length === 0) return null;
+
+  const currency = amounts[0]?.Code || 'KRW';
+
+  const minAmount = amounts.find(a => a.AmountApplication === 'MIN');
+  const maxAmount = amounts.find(a => a.AmountApplication === 'MAX');
+
+  if (minAmount && maxAmount) {
+    return {
+      min: minAmount.CurrencyAmountValue || 0,
+      max: maxAmount.CurrencyAmountValue || 0,
+      currency,
+    };
+  }
+
+  const value = amounts[0]?.CurrencyAmountValue;
+  if (value != null) {
+    return { min: value, max: value, currency };
+  }
+
+  return null;
+}
+
+function extractTimedFee(details: PenaltyDetail[]): {
+  beforeDeparture: { min: number; max: number; currency: string } | null;
+  afterDeparture: { min: number; max: number; currency: string } | null;
+} | null {
+  if (!details || details.length === 0) return null;
+
+  const beforeDetail = details.find(d => d.Application?.Code === '1');
+  const afterDetail = details.find(d => d.Application?.Code === '2');
+
+  const beforeFee = beforeDetail ? extractFeeRange(beforeDetail.Amounts) : null;
+  const afterFee = afterDetail ? extractFeeRange(afterDetail.Amounts) : null;
+
+  if (!beforeFee && !afterFee) {
+    const defaultFee = extractFeeRange(details[0]?.Amounts);
+    if (defaultFee) {
+      return { beforeDeparture: defaultFee, afterDeparture: null };
+    }
+    return null;
+  }
+
+  return { beforeDeparture: beforeFee, afterDeparture: afterFee };
+}
+
+function extractPenaltyInfo(orderItems: Array<{
+  FareDetail?: Array<{
+    FareComponent?: Array<{
+      Penalty?: {
+        Change?: string;
+        Refund?: string;
+        Detail?: PenaltyDetail[];
+        Description?: string[];
+      };
+    }>;
+  }>;
+}>): PenaltyInfo | undefined {
+  for (const item of orderItems) {
+    const fareDetail = item.FareDetail?.[0];
+    const penalty = fareDetail?.FareComponent?.[0]?.Penalty;
+
+    if (penalty) {
+      const canChange = penalty.Change === 'true';
+      const canRefund = penalty.Refund === 'true';
+
+      const changeDetails = penalty.Detail?.filter(d => d.Type === 'Change') || [];
+      const changeFee = extractTimedFee(changeDetails);
+
+      const cancelDetails = penalty.Detail?.filter(d => d.Type === 'Cancel' || d.Type === 'Refund') || [];
+      const cancelFee = extractTimedFee(cancelDetails);
+
+      return {
+        canChange,
+        canRefund,
+        changeFee,
+        cancelFee,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function getCarrierName(code: string): string {
+  const carriers: Record<string, string> = {
+    SQ: 'Singapore Airlines',
+    AF: 'Air France',
+    KL: 'KLM Royal Dutch Airlines',
+    QR: 'Qatar Airways',
+    KE: 'Korean Air',
+    OZ: 'Asiana Airlines',
+    TR: 'ScootAviation',
+    TG: 'Thai Airways',
+    NH: 'All Nippon Airways',
+    JL: 'Japan Airlines',
+    CX: 'Cathay Pacific',
+    EK: 'Emirates',
+    LH: 'Lufthansa',
+  };
+  return carriers[code] || code;
+}
+
+// ============================================================
+// ⭐ v3.10.1: Passenger information Change Available Item Calculate
+// ============================================================
+
+function getAllowedPaxChanges(
+  carrierCode: string,
+  isTicketed: boolean,
+  isPaid: boolean
+): AllowedPaxChanges {
+  const features = getCarrierPaxChangeFeatures(carrierCode);
+  const isHold = !isTicketed && !isPaid;
+
+  const isSupported = isHold ? features.holdSupported : features.ticketedSupported;
+
+  if (!isSupported) {
+    return {
+      canChangeName: false,
+      canChangeContact: false,
+      canChangeApis: false,
+      canChangeFfn: false,
+      canChangeDoca: false,
+      mode: features.mode,
+      allowedActions: [],
+    };
+  }
+
+  return {
+    canChangeName: features.name.supported,
+    canChangeContact: features.contact.supported,
+    canChangeApis: features.apis.supported,
+    canChangeFfn: features.ffn.supported,
+    canChangeDoca: features.doca?.supported ?? false,
+    mode: features.mode,
+    allowedActions: getAllowedActions(carrierCode),
+  };
+}
+
+// ============================================================
+// ⭐ v3.6: Per carrier Workflow Support Matrix based ActionState
+// ============================================================
+
+type SupportLevel = 'PROD' | 'PARTIAL' | 'SANDBOX' | 'NONE';
+
+interface CarrierWorkflowSupport {
+  WF_HELD_CONFIRM: SupportLevel;
+  WF_HELD_CANCEL: SupportLevel;
+  WF_HELD_ITIN: SupportLevel;
+  WF_HELD_PAX: SupportLevel;
+  WF_HELD_SERVICE: SupportLevel;
+  WF_HELD_SEAT: SupportLevel;
+  WF_TKT_REFUND: SupportLevel;
+  WF_TKT_VOLCHANGE: SupportLevel;
+  WF_TKT_PAX: SupportLevel;
+  WF_TKT_SERVICE: SupportLevel;
+  WF_TKT_SEAT: SupportLevel;
+}
+
+const CARRIER_SUPPORT_MATRIX: Record<string, CarrierWorkflowSupport> = {
+  AA: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'NONE', WF_HELD_SERVICE: 'NONE', WF_HELD_SEAT: 'NONE', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'NONE', WF_TKT_PAX: 'NONE', WF_TKT_SERVICE: 'NONE', WF_TKT_SEAT: 'NONE' },
+  AF: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'PROD', WF_HELD_PAX: 'PROD', WF_HELD_SERVICE: 'PROD', WF_HELD_SEAT: 'PROD', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'PROD', WF_TKT_PAX: 'PROD', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  AY: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'PROD', WF_HELD_PAX: 'PROD', WF_HELD_SERVICE: 'PROD', WF_HELD_SEAT: 'PROD', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'PROD', WF_TKT_PAX: 'PROD', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  BA: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'NONE', WF_HELD_SERVICE: 'NONE', WF_HELD_SEAT: 'NONE', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'NONE', WF_TKT_PAX: 'NONE', WF_TKT_SERVICE: 'NONE', WF_TKT_SEAT: 'NONE' },
+  EK: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'NONE', WF_HELD_SERVICE: 'NONE', WF_HELD_SEAT: 'NONE', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'NONE', WF_TKT_PAX: 'NONE', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  HA: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'PROD', WF_HELD_SERVICE: 'PROD', WF_HELD_SEAT: 'PROD', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'PROD', WF_TKT_PAX: 'PROD', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  KE: { WF_HELD_CONFIRM: 'NONE', WF_HELD_CANCEL: 'NONE', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'NONE', WF_HELD_SERVICE: 'NONE', WF_HELD_SEAT: 'NONE', WF_TKT_REFUND: 'NONE', WF_TKT_VOLCHANGE: 'NONE', WF_TKT_PAX: 'NONE', WF_TKT_SERVICE: 'NONE', WF_TKT_SEAT: 'NONE' },
+  KL: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'PROD', WF_HELD_PAX: 'PROD', WF_HELD_SERVICE: 'PROD', WF_HELD_SEAT: 'PROD', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'PROD', WF_TKT_PAX: 'PROD', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  LH: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'NONE', WF_HELD_SERVICE: 'NONE', WF_HELD_SEAT: 'NONE', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'NONE', WF_TKT_PAX: 'NONE', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  QR: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'NONE', WF_HELD_SERVICE: 'PROD', WF_HELD_SEAT: 'PROD', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'NONE', WF_TKT_PAX: 'NONE', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  SQ: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'PROD', WF_HELD_PAX: 'PROD', WF_HELD_SERVICE: 'PROD', WF_HELD_SEAT: 'PROD', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'PROD', WF_TKT_PAX: 'PROD', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  TK: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'PROD', WF_HELD_SERVICE: 'PROD', WF_HELD_SEAT: 'PROD', WF_TKT_REFUND: 'PROD', WF_TKT_VOLCHANGE: 'PROD', WF_TKT_PAX: 'PROD', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+  TR: { WF_HELD_CONFIRM: 'PROD', WF_HELD_CANCEL: 'PROD', WF_HELD_ITIN: 'NONE', WF_HELD_PAX: 'NONE', WF_HELD_SERVICE: 'PROD', WF_HELD_SEAT: 'PROD', WF_TKT_REFUND: 'NONE', WF_TKT_VOLCHANGE: 'NONE', WF_TKT_PAX: 'NONE', WF_TKT_SERVICE: 'PROD', WF_TKT_SEAT: 'PROD' },
+};
+
+function isWorkflowSupported(carrierCode: string, workflow: keyof CarrierWorkflowSupport): boolean {
+  const support = CARRIER_SUPPORT_MATRIX[carrierCode];
+  if (!support) return true; // If absent in matrix, allow by default
+  const level = support[workflow];
+  return level === 'PROD' || level === 'PARTIAL';
+}
+
+function getActionState(carrierCode: string, isTicketed: boolean, isPaid: boolean, orderStatus: string) {
+  const isCancelled = orderStatus === 'CANCELLED';
+  const isHeld = !isPaid && !isTicketed && !isCancelled;
+  const paidOrTicketed = isPaid || isTicketed;
+
+  // ⚠️ TR special handling: refund not possible after payment (ticket not issued)
+  const isTRPaid = carrierCode === 'TR' && isPaid;
+
+  return {
+    canPay: isHeld && isWorkflowSupported(carrierCode, 'WF_HELD_CONFIRM'),
+    canCancel: isHeld && isWorkflowSupported(carrierCode, 'WF_HELD_CANCEL'),
+    canVoidRefund: paidOrTicketed && !isCancelled && !isTRPaid &&
+      isWorkflowSupported(carrierCode, 'WF_TKT_REFUND'),
+    canChangeJourney: !isCancelled && (
+      (isHeld && isWorkflowSupported(carrierCode, 'WF_HELD_ITIN')) ||
+      (paidOrTicketed && isWorkflowSupported(carrierCode, 'WF_TKT_VOLCHANGE'))
+    ),
+    canChangeInfo: !isCancelled && (
+      (isHeld && isWorkflowSupported(carrierCode, 'WF_HELD_PAX')) ||
+      (paidOrTicketed && isWorkflowSupported(carrierCode, 'WF_TKT_PAX'))
+    ),
+    canPurchaseService: !isCancelled && (
+      (isHeld && isWorkflowSupported(carrierCode, 'WF_HELD_SERVICE')) ||
+      (paidOrTicketed && isWorkflowSupported(carrierCode, 'WF_TKT_SERVICE'))
+    ),
+  };
+}

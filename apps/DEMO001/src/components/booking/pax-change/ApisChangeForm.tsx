@@ -1,0 +1,305 @@
+
+import React, { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { VALIDATION_PATTERNS } from '@/types/pax-change';
+import type { ApisInfo, PaxActionType } from '@/types/booking';
+
+interface ApisChangeFormProps {
+  currentApis?: ApisInfo;
+  departureDate?: string; // Departure - Passport Expiry Date for Verify
+  action?: PaxActionType; // from Parent Select Task
+  onSubmit: (data: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}
+
+const COMMON_COUNTRIES = [
+  { code: 'KR', label: 'South Korea (KR)' },
+  { code: 'US', label: 'United States (US)' },
+  { code: 'JP', label: 'Japan (JP)' },
+  { code: 'CN', label: 'China (CN)' },
+  { code: 'SG', label: 'Singapore (SG)' },
+  { code: 'GB', label: 'United Kingdom (GB)' },
+  { code: 'DE', label: 'Germany (DE)' },
+  { code: 'FR', label: 'France (FR)' },
+  { code: 'AU', label: 'Australia (AU)' },
+  { code: 'CA', label: 'Canada (CA)' },
+];
+
+export default function ApisChangeForm({
+  currentApis,
+  departureDate,
+  action = 'MODIFY',
+  onSubmit,
+  onCancel,
+  isSubmitting,
+}: ApisChangeFormProps) {
+  const [passportNumber, setPassportNumber] = useState(currentApis?.passportNumber || '');
+  const [nationality, setNationality] = useState(currentApis?.nationality || 'KR');
+  const [expiryDate, setExpiryDate] = useState(currentApis?.expiryDate || '');
+  const [issuingCountry, setIssuingCountry] = useState(currentApis?.nationality || 'KR');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const hasExistingApis = !!(currentApis?.passportNumber);
+
+  const handlePassportChange = (value: string) => {
+    const upper = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    setPassportNumber(upper);
+    if (errors.passportNumber) {
+      setErrors(prev => ({ ...prev, passportNumber: '' }));
+    }
+  };
+
+  const validateExpiryDate = (date: string): string | null => {
+    if (!VALIDATION_PATTERNS.DATE.test(date)) {
+      return 'Expiry date must be in YYYY-MM-DD format.';
+    }
+
+    const expiry = new Date(date);
+    const today = new Date();
+
+    if (expiry <= today) {
+      return 'Passport has already expired.';
+    }
+
+    // Departure Criteria 6 month Verify
+    if (departureDate) {
+      const departure = new Date(departureDate);
+      const sixMonthsAfter = new Date(departure);
+      sixMonthsAfter.setMonth(sixMonthsAfter.getMonth() + 6);
+
+      if (expiry < sixMonthsAfter) {
+        return 'Passport must be valid for at least 6 months after the departure date.';
+      }
+    }
+
+    return null;
+  };
+
+  const validate = (): boolean => {
+    // DELETE Task Verify not required
+    if (action === 'DELETE') {
+      return true;
+    }
+
+    const newErrors: Record<string, string> = {};
+
+    if (!passportNumber.trim()) {
+      newErrors.passportNumber = 'Please enter your passport number.';
+    } else if (!VALIDATION_PATTERNS.PASSPORT.test(passportNumber)) {
+      newErrors.passportNumber = 'Passport number must contain only uppercase letters and numbers.';
+    }
+
+    if (!nationality) {
+      newErrors.nationality = 'Please select your nationality.';
+    }
+
+    if (!expiryDate) {
+      newErrors.expiryDate = 'Please enter the expiry date.';
+    } else {
+      const expiryError = validateExpiryDate(expiryDate);
+      if (expiryError) {
+        newErrors.expiryDate = expiryError;
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    if (action === 'DELETE') {
+      await onSubmit({});
+    } else {
+      await onSubmit({
+        passportNumber: passportNumber.trim(),
+        nationality,
+        expiryDate,
+        issuingCountry,
+      });
+    }
+  };
+
+  // Minimum Expiry date Calculate (today + 6 months)
+  const getMinExpiryDate = (): string => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + 6);
+    return date.toISOString().split('T')[0];
+  };
+
+  // DELETE Mode
+  if (action === 'DELETE') {
+    return (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
+          <strong>NOTE:</strong> Existing passport information will be deleted.
+        </div>
+
+        {hasExistingApis && (
+          <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+            <p className="text-sm text-muted">Passport information to be deleted</p>
+            <p className="text-sm">Passport Number: {currentApis?.passportNumber}</p>
+            <p className="text-sm">Nationality: {currentApis?.nationality}</p>
+            <p className="text-sm">Expiry Date: {currentApis?.expiryDate}</p>
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-2 w-full overflow-hidden">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 min-w-0 py-2 px-4 border border-border rounded-lg text-foreground hover:bg-muted/50 transition-colors"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="flex-1 min-w-0 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Deleting...' : 'Delete Passport'}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  // ADD / MODIFY Mode
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+        <strong>NOTE:</strong> Passport information must exactly match your actual passport.
+        The expiry date must be at least 6 months after the departure date.
+      </div>
+
+      {/* Passport Number */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Passport Number <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={passportNumber}
+          onChange={(e) => handlePassportChange(e.target.value)}
+          placeholder="e.g.: M12345678"
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.passportNumber ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+          maxLength={20}
+        />
+        {errors.passportNumber && (
+          <p className="mt-1 text-sm text-red-500">{errors.passportNumber}</p>
+        )}
+      </div>
+
+      {/* Nationality */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Nationality <span className="text-red-500">*</span>
+        </label>
+        <select
+          value={nationality}
+          onChange={(e) => {
+            setNationality(e.target.value);
+            if (issuingCountry === nationality) {
+              setIssuingCountry(e.target.value);
+            }
+          }}
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.nationality ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+        >
+          {COMMON_COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        {errors.nationality && (
+          <p className="mt-1 text-sm text-red-500">{errors.nationality}</p>
+        )}
+      </div>
+
+      {/* Issued Country */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Issuing Country
+        </label>
+        <select
+          value={issuingCountry}
+          onChange={(e) => setIssuingCountry(e.target.value)}
+          className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          disabled={isSubmitting}
+        >
+          {COMMON_COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-muted">Usually the same as nationality.</p>
+      </div>
+
+      {/* Expiry Date */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Expiry Date <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="date"
+          value={expiryDate}
+          onChange={(e) => {
+            setExpiryDate(e.target.value);
+            if (errors.expiryDate) {
+              setErrors(prev => ({ ...prev, expiryDate: '' }));
+            }
+          }}
+          min={getMinExpiryDate()}
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.expiryDate ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+        />
+        {errors.expiryDate && (
+          <p className="mt-1 text-sm text-red-500">{errors.expiryDate}</p>
+        )}
+      </div>
+
+      {/* Preview */}
+      <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+        <p className="text-sm text-muted">{action === 'ADD' ? 'Passport to be added' : 'Passport after change'}</p>
+        <p className="text-sm">Passport Number: {passportNumber || '-'}</p>
+        <p className="text-sm">Nationality: {nationality}</p>
+        <p className="text-sm">Expiry Date: {expiryDate || '-'}</p>
+      </div>
+
+      {/* Buttons */}
+      <div className="flex gap-3 pt-2 w-full overflow-hidden">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 min-w-0 py-2 px-4 border border-border rounded-lg text-foreground hover:bg-muted/50 transition-colors"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="flex-1 min-w-0 py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Processing...' : action === 'ADD' ? 'Add Passport' : 'Update Passport'}
+        </button>
+      </div>
+    </form>
+  );
+}

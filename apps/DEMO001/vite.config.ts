@@ -1,0 +1,27 @@
+/**
+ * @template vite.config.ts
+ * @version 4.1.0
+ * @description Vite configuration for DEMO001 tenant app.
+ *              Defines path aliases, dev proxy, and build output.
+ */
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  base: process.env.VITE_BASE_PATH || '/',
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  server: {
+    proxy: {
+      '/middleware': 'http://localhost:3000',
+    },
+  },
+  build: {
+    outDir: 'dist',
+  },
+});

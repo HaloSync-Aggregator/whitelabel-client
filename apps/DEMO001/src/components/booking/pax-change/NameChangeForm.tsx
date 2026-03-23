@@ -1,0 +1,178 @@
+
+import React, { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { VALIDATION_PATTERNS } from '@/types/pax-change';
+
+interface NameChangeFormProps {
+  currentSurname?: string;
+  currentGivenName?: string;
+  currentTitle?: string;
+  onSubmit: (data: { property: string; givenName: string; title?: string }) => Promise<void>;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}
+
+const TITLE_OPTIONS = [
+  { value: 'MR', label: 'MR (Male)' },
+  { value: 'MRS', label: 'MRS (Married Female)' },
+  { value: 'MS', label: 'MS (Female)' },
+  { value: 'MSTR', label: 'MSTR (Boy)' },
+  { value: 'MISS', label: 'MISS (Girl)' },
+];
+
+export default function NameChangeForm({
+  currentSurname = '',
+  currentGivenName = '',
+  currentTitle,
+  onSubmit,
+  onCancel,
+  isSubmitting,
+}: NameChangeFormProps) {
+  const [property, setSurname] = useState(currentSurname.toUpperCase());
+  const [givenName, setGivenName] = useState(currentGivenName.toUpperCase());
+  const [title, setTitle] = useState(currentTitle || '');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const handleSurnameChange = (value: string) => {
+    const upper = value.toUpperCase().replace(/[^A-Z\s]/g, '');
+    setSurname(upper);
+    if (errors.property) {
+      setErrors(prev => ({ ...prev, property: '' }));
+    }
+  };
+
+  const handleGivenNameChange = (value: string) => {
+    const upper = value.toUpperCase().replace(/[^A-Z\s]/g, '');
+    setGivenName(upper);
+    if (errors.givenName) {
+      setErrors(prev => ({ ...prev, givenName: '' }));
+    }
+  };
+
+  const validate = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!property.trim()) {
+      newErrors.property = 'Please enter surname.';
+    } else if (!VALIDATION_PATTERNS.NAME.test(property)) {
+      newErrors.property = 'Uppercase English only allowed.';
+    }
+
+    if (!givenName.trim()) {
+      newErrors.givenName = 'Please enter given name.';
+    } else if (!VALIDATION_PATTERNS.NAME.test(givenName)) {
+      newErrors.givenName = 'Uppercase English only allowed.';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    await onSubmit({
+      property: property.trim(),
+      givenName: givenName.trim(),
+      title: title || undefined,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+        <strong>NOTE:</strong> Name must exactly match your passport. Uppercase English only allowed.
+      </div>
+
+      {/* Title Select */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Title (Optional)
+        </label>
+        <select
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          disabled={isSubmitting}
+        >
+          <option value="">Select</option>
+          {TITLE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Surname */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Surname <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={property}
+          onChange={(e) => handleSurnameChange(e.target.value)}
+          placeholder="e.g.: HONG"
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.property ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+        />
+        {errors.property && (
+          <p className="mt-1 text-sm text-red-500">{errors.property}</p>
+        )}
+      </div>
+
+      {/* Given Name */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Given Name <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={givenName}
+          onChange={(e) => handleGivenNameChange(e.target.value)}
+          placeholder="e.g.: GILDONG"
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.givenName ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+        />
+        {errors.givenName && (
+          <p className="mt-1 text-sm text-red-500">{errors.givenName}</p>
+        )}
+      </div>
+
+      {/* Preview */}
+      <div className="bg-muted/50 rounded-lg p-3">
+        <p className="text-sm text-muted">Name after change</p>
+        <p className="font-semibold text-foreground">
+          {title && `${title} `}{property}/{givenName}
+        </p>
+      </div>
+
+      {/* Buttons */}
+      <div className="flex gap-3 pt-2 w-full overflow-hidden">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 min-w-0 py-2 px-4 border border-border rounded-lg text-foreground hover:bg-muted/50 transition-colors"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="flex-1 min-w-0 py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Changing...' : 'Change Name'}
+        </button>
+      </div>
+    </form>
+  );
+}

@@ -1,0 +1,453 @@
+// @template ContactAddDeleteForm
+// @version 4.0.0 (synced from template)
+// @description Template for booking/pax-change/ContactAddDeleteForm.tsx
+
+/**
+ * ContactAddDeleteForm Component
+ * @version 3.13.5
+ *
+ * Phone Add/Delete Form (ADD_DELETE_ONLY Mode)
+ * v3.13.0: contactDetails for selecting phones to delete
+ * v3.13.5: Button Container overflow-hidden added (fixes overflow in Modal)
+ */
+
+import React, { useState, useMemo } from 'react';
+import { cn } from '@/lib/utils';
+import { VALIDATION_PATTERNS } from '@/types/pax-change';
+import type { PaxActionType, ContactDetail } from '@/types/booking';
+
+interface ContactAddDeleteFormProps {
+  currentEmail?: string;
+  currentPhone?: string;
+  contactInfoId?: string;
+  // v3.13.0: Phone Detail Information (used for Delete selection)
+  contactDetails?: ContactDetail[];
+  action?: PaxActionType;
+  onSubmit: (data: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}
+
+const COUNTRY_CODES = [
+  { code: '82', label: 'South Korea (+82)' },
+  { code: '1', label: 'United States/Canada (+1)' },
+  { code: '81', label: 'Japan (+81)' },
+  { code: '86', label: 'China (+86)' },
+  { code: '65', label: 'Singapore (+65)' },
+];
+
+// Delete Target Type
+type DeleteTarget = {
+  type: 'phone' | 'email';
+  contactInfoId: string;
+  value: string;
+  displayValue: string;
+};
+
+export default function ContactAddDeleteForm({
+  currentEmail = '',
+  currentPhone = '',
+  contactInfoId,
+  contactDetails = [],
+  action: preSelectedAction,
+  onSubmit,
+  onCancel,
+  isSubmitting,
+}: ContactAddDeleteFormProps) {
+  const [internalAction, setInternalAction] = useState<'ADD' | 'DELETE'>('ADD');
+  const action = (preSelectedAction as 'ADD' | 'DELETE') || internalAction;
+  const showActionSelector = !preSelectedAction;
+
+  // ADD mode state
+  const [email, setEmail] = useState('');
+  const [countryCode, setCountryCode] = useState('82');
+  const [phoneNumber, setPhoneNumber] = useState('');
+
+  // DELETE mode state - selected delete targets
+  const [selectedDeleteTargets, setSelectedDeleteTargets] = useState<Set<string>>(new Set());
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // v3.13.0: Create delete target list from contactDetails
+  const deleteTargets = useMemo<DeleteTarget[]>(() => {
+    const targets: DeleteTarget[] = [];
+
+    contactDetails.forEach(cd => {
+      // Add phone numbers
+      cd.phones.forEach((phone, idx) => {
+        const displayValue = phone.formatted || phone.phoneNumber;
+        targets.push({
+          type: 'phone',
+          contactInfoId: cd.contactInfoId,
+          value: `${cd.contactInfoId}-phone-${idx}`,
+          displayValue,
+        });
+      });
+
+      // Add emails
+      cd.emails.forEach((emailItem, idx) => {
+        targets.push({
+          type: 'email',
+          contactInfoId: cd.contactInfoId,
+          value: `${cd.contactInfoId}-email-${idx}`,
+          displayValue: emailItem.emailAddress,
+        });
+      });
+    });
+
+    return targets;
+  }, [contactDetails]);
+
+  // Fallback: use currentEmail/currentPhone when contactDetails is not present
+  const fallbackTargets = useMemo<DeleteTarget[]>(() => {
+    const targets: DeleteTarget[] = [];
+    if (currentPhone) {
+      targets.push({
+        type: 'phone',
+        contactInfoId: contactInfoId || 'unknown',
+        value: 'phone-0',
+        displayValue: currentPhone,
+      });
+    }
+    if (currentEmail) {
+      targets.push({
+        type: 'email',
+        contactInfoId: contactInfoId || 'unknown',
+        value: 'email-0',
+        displayValue: currentEmail,
+      });
+    }
+    return targets;
+  }, [currentPhone, currentEmail, contactInfoId]);
+
+  const allDeleteTargets = deleteTargets.length > 0 ? deleteTargets : fallbackTargets;
+  const hasExistingContact = allDeleteTargets.length > 0;
+
+  // Toggle delete target selection
+  const toggleDeleteTarget = (value: string) => {
+    setSelectedDeleteTargets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(value)) {
+        newSet.delete(value);
+      } else {
+        newSet.add(value);
+      }
+      return newSet;
+    });
+  };
+
+  // Select/deselect all
+  const toggleSelectAll = () => {
+    if (selectedDeleteTargets.size === allDeleteTargets.length) {
+      setSelectedDeleteTargets(new Set());
+    } else {
+      setSelectedDeleteTargets(new Set(allDeleteTargets.map(t => t.value)));
+    }
+  };
+
+  const validate = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (action === 'ADD') {
+      if (email && !VALIDATION_PATTERNS.EMAIL.test(email)) {
+        newErrors.email = 'Please enter a valid email address.';
+      }
+      if (phoneNumber && !VALIDATION_PATTERNS.PHONE.test(phoneNumber)) {
+        newErrors.phone = 'Phone number can only contain numbers, +, and -.';
+      }
+      if (!email && !phoneNumber) {
+        newErrors.general = 'Please enter an email or phone number to add.';
+      }
+    }
+
+    if (action === 'DELETE') {
+      if (!hasExistingContact) {
+        newErrors.general = 'No existing contact information to delete.';
+      } else if (selectedDeleteTargets.size === 0) {
+        newErrors.general = 'Please select the contact to delete.';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    if (action === 'DELETE') {
+      // v3.13.3: NDC spec section 4.3 - ContactInfoList must contain items to "keep after deletion"!
+      const selectedTargetsList = allDeleteTargets.filter(t => selectedDeleteTargets.has(t.value));
+
+      // Use the ContactInfoID of the first selected item
+      const deleteContactInfoId = selectedTargetsList[0]?.contactInfoId;
+
+      // v3.13.3: Filter only items belonging to this ContactInfoID
+      const sameIdTargets = allDeleteTargets.filter(t => t.contactInfoId === deleteContactInfoId);
+      const sameIdPhones = sameIdTargets.filter(t => t.type === 'phone');
+      const sameIdEmails = sameIdTargets.filter(t => t.type === 'email');
+
+      // Items to delete from this ContactInfoID
+      const phonesToDelete = selectedTargetsList.filter(t => t.type === 'phone').map(t => t.displayValue);
+      const emailsToDelete = selectedTargetsList.filter(t => t.type === 'email').map(t => t.displayValue);
+
+      // v3.13.3: "Items to keep" = all items from this ContactInfoID minus the deleted ones
+      const phonesToKeep = sameIdPhones
+        .filter(t => !selectedDeleteTargets.has(t.value))
+        .map(t => t.displayValue);
+      const emailsToKeep = sameIdEmails
+        .filter(t => !selectedDeleteTargets.has(t.value))
+        .map(t => t.displayValue);
+
+      console.log('[ContactAddDeleteForm] DELETE - ContactInfoID:', deleteContactInfoId);
+      console.log('[ContactAddDeleteForm] DELETE - Phones to keep:', phonesToKeep);
+      console.log('[ContactAddDeleteForm] DELETE - Emails to keep:', emailsToKeep);
+
+      await onSubmit({
+        contactInfoId: deleteContactInfoId,
+        deletePhones: phonesToDelete,
+        deleteEmails: emailsToDelete,
+        keepPhones: phonesToKeep,
+        keepEmails: emailsToKeep,
+      });
+    } else {
+      await onSubmit({
+        email: email || undefined,
+        phone: phoneNumber ? { countryCode, number: phoneNumber } : undefined,
+      });
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {showActionSelector && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+          <strong>Guide:</strong> This airline only supports adding/deleting contacts, not modifying them.
+        </div>
+      )}
+
+      {errors.general && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
+          {errors.general}
+        </div>
+      )}
+
+      {/* Action Select (if not pre-selected by parent) */}
+      {showActionSelector && (
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-2">
+            Select Action
+          </label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="action"
+                value="ADD"
+                checked={internalAction === 'ADD'}
+                onChange={() => setInternalAction('ADD')}
+                className="text-primary focus:ring-primary"
+                disabled={isSubmitting}
+              />
+              <span>Add new contact</span>
+            </label>
+            <label className={cn(
+              'flex items-center gap-2',
+              hasExistingContact ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+            )}>
+              <input
+                type="radio"
+                name="action"
+                value="DELETE"
+                checked={internalAction === 'DELETE'}
+                onChange={() => setInternalAction('DELETE')}
+                className="text-primary focus:ring-primary"
+                disabled={isSubmitting || !hasExistingContact}
+              />
+              <span>Delete existing contact</span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* ADD Mode Input Form */}
+      {action === 'ADD' && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
+              }}
+              placeholder="example@email.com"
+              className={cn(
+                'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+                errors.email ? 'border-red-500' : 'border-border'
+              )}
+              disabled={isSubmitting}
+            />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-500">{errors.email}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">
+              Phone number
+            </label>
+            <div className="flex gap-2">
+              <select
+                value={countryCode}
+                onChange={(e) => setCountryCode(e.target.value)}
+                className="w-40 px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                disabled={isSubmitting}
+              >
+                {COUNTRY_CODES.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/[^\d+\-\s]/g, '');
+                  setPhoneNumber(cleaned);
+                  if (errors.phone) setErrors(prev => ({ ...prev, phone: '' }));
+                }}
+                placeholder="010-1234-5678"
+                className={cn(
+                  'flex-1 px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+                  errors.phone ? 'border-red-500' : 'border-border'
+                )}
+                disabled={isSubmitting}
+              />
+            </div>
+            {errors.phone && (
+              <p className="mt-1 text-sm text-red-500">{errors.phone}</p>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* v3.13.0: DELETE Mode - Select contacts to delete */}
+      {action === 'DELETE' && hasExistingContact && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium text-foreground">
+              Select contact to delete
+            </label>
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="text-xs text-primary hover:underline"
+            >
+              {selectedDeleteTargets.size === allDeleteTargets.length ? 'Deselect all' : 'Select all'}
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {/* Phone number list */}
+            {allDeleteTargets.filter(t => t.type === 'phone').length > 0 && (
+              <div>
+                <p className="text-xs text-muted mb-1">Phone number</p>
+                <div className="space-y-1">
+                  {allDeleteTargets.filter(t => t.type === 'phone').map((target) => (
+                    <label
+                      key={target.value}
+                      className={cn(
+                        'flex items-center gap-3 p-2 border rounded-lg cursor-pointer transition-colors',
+                        selectedDeleteTargets.has(target.value)
+                          ? 'border-red-500 bg-red-50'
+                          : 'border-border hover:border-muted'
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedDeleteTargets.has(target.value)}
+                        onChange={() => toggleDeleteTarget(target.value)}
+                        className="text-red-500 focus:ring-red-500"
+                        disabled={isSubmitting}
+                      />
+                      <svg className="w-4 h-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                      <span className="text-sm text-foreground">{target.displayValue}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Email list */}
+            {allDeleteTargets.filter(t => t.type === 'email').length > 0 && (
+              <div>
+                <p className="text-xs text-muted mb-1">Email</p>
+                <div className="space-y-1">
+                  {allDeleteTargets.filter(t => t.type === 'email').map((target) => (
+                    <label
+                      key={target.value}
+                      className={cn(
+                        'flex items-center gap-3 p-2 border rounded-lg cursor-pointer transition-colors',
+                        selectedDeleteTargets.has(target.value)
+                          ? 'border-red-500 bg-red-50'
+                          : 'border-border hover:border-muted'
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedDeleteTargets.has(target.value)}
+                        onChange={() => toggleDeleteTarget(target.value)}
+                        className="text-red-500 focus:ring-red-500"
+                        disabled={isSubmitting}
+                      />
+                      <svg className="w-4 h-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <span className="text-sm text-foreground break-all">{target.displayValue}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {selectedDeleteTargets.size > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
+              <strong>{selectedDeleteTargets.size} item(s)</strong> will be deleted.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* v3.13.5: Button Container with overflow-hidden, min-w-0 on all flex buttons */}
+      <div className="flex gap-3 pt-2 w-full overflow-hidden">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 min-w-0 py-2 px-4 border border-border rounded-lg text-foreground hover:bg-muted/50 transition-colors"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className={cn(
+            'flex-1 min-w-0 py-2 px-4 rounded-lg text-white transition-colors disabled:opacity-50',
+            action === 'DELETE' ? 'bg-red-500 hover:bg-red-600' : 'bg-primary hover:bg-primary/90'
+          )}
+          disabled={isSubmitting || (action === 'DELETE' && selectedDeleteTargets.size === 0)}
+        >
+          {isSubmitting ? 'Processing...' : action === 'DELETE' ? 'Delete' : 'Add'}
+        </button>
+      </div>
+    </form>
+  );
+}

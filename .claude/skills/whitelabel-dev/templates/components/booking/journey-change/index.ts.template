@@ -1,0 +1,14 @@
+// @template index
+// @version 4.0.0 (synced from template)
+// @description Template for booking/journey-change/index.ts
+
+// Template v1.0.0 - Journey Change Components
+/**
+ * Journey Change Components
+ */
+
+export { default as JourneyChangeModal } from './JourneyChangeModal';
+export { default as ItinerarySelector } from './ItinerarySelector';
+export { default as ChangeModeSelector } from './ChangeModeSelector';
+export { default as FlightOptionList } from './FlightOptionList';
+export { default as PriceSummaryCard } from './PriceSummaryCard';

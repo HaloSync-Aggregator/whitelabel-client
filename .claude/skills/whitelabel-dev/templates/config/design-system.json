@@ -1,0 +1,97 @@
+{
+  "colors": {
+ "_comment": "⭐ semantic Field Single Colorto bg-background, text-foreground etc.from Directly Use",
+    "semantic": {
+      "background": "#FFFFFF",
+      "surface": "#F8F9FA",
+      "foreground": "#202124",
+      "muted": "#5f6368",
+      "border": "#E8EAED"
+    },
+    "primary": "#1a73e8",
+    "primaryHover": "#1557b0",
+    "secondary": "#ea4335",
+    "accent": "#34a853",
+    "accentOrange": "#fbbc04",
+    "text": {
+      "primary": "#202124",
+      "secondary": "#5f6368",
+      "tertiary": "#80868b"
+    },
+    "background": {
+      "primary": "#FFFFFF",
+      "secondary": "#F8F9FA",
+      "tertiary": "#F1F3F4"
+    },
+    "border": {
+      "light": "#E8EAED",
+      "dark": "#DADCE0"
+    },
+    "status": {
+      "info": "#1a73e8",
+      "success": "#34a853",
+      "warning": "#fbbc04",
+      "error": "#ea4335"
+    },
+    "ai": {
+      "pastel": "#E8F0FE",
+      "gradient": ["#1a73e8", "#34a853"]
+    }
+  },
+  "typography": {
+    "fontFamily": "Google Sans, Roboto, -apple-system, BlinkMacSystemFont, sans-serif",
+    "fontFamilyDisplay": "Google Sans Display, sans-serif",
+    "fontSize": {
+      "xs": "11px",
+      "sm": "12px",
+      "base": "14px",
+      "lg": "16px",
+      "xl": "18px",
+      "2xl": "22px",
+      "3xl": "28px",
+      "4xl": "36px"
+    },
+    "fontWeight": {
+      "normal": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "letterSpacing": {
+      "tight": "-0.01em",
+      "normal": "0",
+      "wide": "0.025em",
+      "wider": "0.05em",
+      "widest": "0.1em"
+    }
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px",
+    "xl": "32px",
+    "2xl": "48px"
+  },
+  "borderRadius": {
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "xl": "16px",
+    "2xl": "24px",
+    "full": "9999px"
+  },
+  "shadows": {
+    "soft": "0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)",
+    "card": "0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15)",
+    "button": "0 1px 3px 0 rgba(26,115,232,0.3)"
+  },
+  "effects": {
+    "aiGradientBorder": {
+      "background": "linear-gradient(white, white) padding-box, linear-gradient(to right, #1a73e8, #34a853) border-box",
+      "border": "2px solid transparent"
+    },
+    "backdropBlur": "blur(12px)",
+    "aiShimmer": "linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent)"
+  }
+}

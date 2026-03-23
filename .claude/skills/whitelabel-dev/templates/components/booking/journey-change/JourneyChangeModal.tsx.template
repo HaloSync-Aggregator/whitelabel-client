@@ -1,0 +1,483 @@
+// @template JourneyChangeModal
+// @version 4.0.0 (synced from template)
+// @description Template for booking/journey-change/JourneyChangeModal.tsx
+
+// Template v1.0.0 - Journey Change JourneyChangeModal
+/**
+ * JourneyChangeModal Component
+ *
+ * ============================================================
+ * Journey/ItineraryChange Modal (v3.24: PaxJourney-based)
+ * ============================================================
+ *
+ * Flow:
+ * 1. select: Select PaxJourney cards + Select change mode
+ * 2. search: Call OrderReshop → Display available flights for change
+ * 3. confirm: Call Quote → Confirm price difference → Payment
+ * 4. result: Display completion/failure
+ *
+ * Carrier-specific branching:
+ * - Pattern A (TK/QR): Reshop → Reprice → OrderChange
+ * - Pattern B (AF/KL): Reshop → Reprice → OrderChange x2
+ * - Pattern C (SQ/AY/KE/HA): Reshop → OrderQuote → OrderChange
+ *
+ * v3.24 Changes:
+ * - Selection by PaxJourney ID (not OrderItem ID)
+ * - OriginDestList built from selected journeys
+ * - RetainServiceID = services on NON-selected journeys
+ * - Add/Delete restricted to HA, TK only
+ */
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  type JourneyChangeStep,
+  type JourneyChangeMode,
+  type CurrentItinerary,
+  type ReshopOffer,
+  type JourneySearchCriteria,
+  type OfferItem,
+  canChangeJourney,
+  requiresOrderQuote,
+  buildDeleteItems,
+  isSuccessCode,
+} from '@/types/journey-change';
+import ItinerarySelector, { type JourneyCriteria } from './ItinerarySelector';
+import ChangeModeSelector from './ChangeModeSelector';
+import FlightOptionList from './FlightOptionList';
+import PriceSummaryCard from './PriceSummaryCard';
+import { processJourneyChange, getJourneyChangeQuote, confirmJourneyChange } from '@/lib/api/polarhub-service';
+import { ERROR_MESSAGES } from '@/lib/error-messages';
+
+// ============================================================
+// Props
+// ============================================================
+
+interface JourneyChangeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  orderId: string;
+  owner: string;
+  transactionId: string;
+  isTicketed: boolean;
+  /** Current Journey List (PaxJourney-based from OrderRetrieve) */
+  itineraries: CurrentItinerary[];
+  /** Round-trip/One-way/Multi-city */
+  tripType: 'RT' | 'OW' | 'MC';
+  onSuccess: () => void;
+}
+
+// ============================================================
+// Component
+// ============================================================
+
+export default function JourneyChangeModal({
+  isOpen,
+  onClose,
+  orderId,
+  owner,
+  transactionId,
+  isTicketed,
+  itineraries,
+  tripType,
+  onSuccess,
+}: JourneyChangeModalProps) {
+  // ============================================================
+  // State
+  // ============================================================
+  const [step, setStep] = useState<JourneyChangeStep>('select');
+  /** Selected PaxJourney IDs (v3.24: PaxJourney-based) */
+  const [selectedJourneyIds, setSelectedJourneyIds] = useState<string[]>([]);
+  const [changeMode, setChangeMode] = useState<JourneyChangeMode>('change');
+  const [_searchCriteria, setSearchCriteria] = useState<JourneySearchCriteria | null>(null);
+  /** Per-journey search criteria (origin/destination/date per selected journey) */
+  const [journeyCriteria, setJourneyCriteria] = useState<Record<string, JourneyCriteria>>({});
+  const [reshopOffers, setReshopOffers] = useState<ReshopOffer[]>([]);
+  const [selectedOffer, setSelectedOffer] = useState<ReshopOffer | null>(null);
+  const [quotedPrice, setQuotedPrice] = useState<{ amount: number; curCode: string } | null>(null);
+  const [priceDifference, setPriceDifference] = useState<{ amount: number; curCode: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // AbortController for API calls
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // ============================================================
+  // Reset state when modal opens/closes
+  // ============================================================
+  useEffect(() => {
+    if (isOpen) {
+      setStep('select');
+      setSelectedJourneyIds([]);
+      setChangeMode('change');
+      setSearchCriteria(null);
+      setJourneyCriteria({});
+      setReshopOffers([]);
+      setSelectedOffer(null);
+      setQuotedPrice(null);
+      setPriceDifference(null);
+      setIsLoading(false);
+      setError(null);
+      setResult(null);
+    }
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, [isOpen]);
+
+  // ============================================================
+  // Initial validation
+  // ============================================================
+  const validationResult = canChangeJourney(owner, isTicketed, tripType);
+
+  // ============================================================
+  // Step 1 → Step 2: Search flights
+  // ============================================================
+  const handleSearchFlights = useCallback(async () => {
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log('[JourneyChange] Searching flights with per-journey criteria:', journeyCriteria);
+
+      // v3.25: Build originDestList from per-journey criteria (user-editable)
+      const originDestList = changeMode === 'delete'
+        ? []
+        : selectedJourneyIds.map(journeyId => {
+            const criteria = journeyCriteria[journeyId];
+            if (!criteria) return null;
+            return {
+              origin: criteria.origin,
+              destination: criteria.destination,
+              departureDate: criteria.departureDate,
+            };
+          }).filter((od): od is NonNullable<typeof od> => od !== null);
+
+      // v3.24: Build deleteItems with correct RetainServiceID
+      const deleteItems = buildDeleteItems(itineraries, selectedJourneyIds, changeMode);
+
+      const data = await processJourneyChange(orderId, {
+        transactionId,
+        changeMode,
+        originDestList,
+        deleteItems,
+        cabin: 'Y',
+      });
+
+      if (abortController.signal.aborted) return;
+
+      setReshopOffers(data.reshopOffers || []);
+      setStep('search');
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      console.error('[JourneyChange] Search error:', err);
+      setError(err instanceof Error ? err.message : ERROR_MESSAGES.JOURNEY_RETRIEVE_FAILED);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [orderId, transactionId, changeMode, selectedJourneyIds, itineraries, journeyCriteria]);
+
+  // ============================================================
+  // Step 2 → Step 3: Get quote
+  // ============================================================
+  const handleSelectOffer = useCallback(async (offer: ReshopOffer) => {
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    setIsLoading(true);
+    setError(null);
+    setSelectedOffer(offer);
+
+    try {
+      console.log('[JourneyChange] Getting quote for offer:', offer.offerId);
+
+      // v3.24: Build affect items from selected journeys
+      const affectItems = selectedJourneyIds.map(journeyId => {
+        const itin = itineraries.find(i => i.paxJourneyId === journeyId);
+        if (!itin) return null;
+
+        // Collect retain services from NON-selected journeys in same OrderItem
+        const sameOrderItemJourneys = itineraries.filter(
+          i => i.orderItemId === itin.orderItemId && !selectedJourneyIds.includes(i.paxJourneyId)
+        );
+        const retainServiceIds = sameOrderItemJourneys.flatMap(j => j.serviceIds);
+
+        return {
+          orderItemRefId: itin.orderItemId,
+          retainServiceId: retainServiceIds,
+        };
+      }).filter((item): item is NonNullable<typeof item> => item !== null);
+
+      // Deduplicate by orderItemRefId
+      const uniqueAffectItems = Array.from(
+        new Map(affectItems.map(item => [item.orderItemRefId, item])).values()
+      );
+
+      const data = await getJourneyChangeQuote(orderId, {
+        transactionId,
+        carrierCode: owner,
+        selectedOffer: {
+          offerId: offer.offerId,
+          owner: offer.owner,
+          responseId: offer.responseId,
+          offerItems: offer.offerItems,
+          totalPrice: offer.totalPrice,
+          priceDifference: offer.priceDifference,
+        },
+        affect: uniqueAffectItems,
+        isReprice: !requiresOrderQuote(owner),
+      });
+
+      if (abortController.signal.aborted) return;
+
+      setQuotedPrice(data.totalPrice ? { amount: data.totalPrice, curCode: data.currency || 'KRW' } : null);
+      setPriceDifference(data.priceDifference ? { amount: data.priceDifference, curCode: data.currency || 'KRW' } : null);
+
+      // Update selectedOffer with quote response data
+      if (data.offerId) {
+        setSelectedOffer(prev => prev ? {
+          ...prev,
+          offerId: data.offerId,
+          responseId: data.responseId || prev.responseId,
+          offerItems: (data.offerItems as OfferItem[] | undefined) || prev.offerItems,
+        } : null);
+      }
+
+      setStep('confirm');
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      console.error('[JourneyChange] Quote error:', err);
+      setError(err instanceof Error ? err.message : ERROR_MESSAGES.JOURNEY_QUOTE_FAILED);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [orderId, transactionId, owner, selectedJourneyIds, itineraries]);
+
+  // ============================================================
+  // Step 3: Confirm change
+  // Server-side 2-step: confirm route handles both OrderChange
+  // calls for AF/KL internally (v1.1.0)
+  // ============================================================
+  const handleConfirm = useCallback(async () => {
+    if (!selectedOffer || !quotedPrice) return;
+
+    abortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log('[JourneyChange] Confirming change...');
+
+      await confirmJourneyChange(orderId, {
+        transactionId,
+        carrierCode: owner,
+        selectedOffer: {
+          offerId: selectedOffer.offerId,
+          owner: selectedOffer.owner,
+          responseId: selectedOffer.responseId,
+          offerItems: selectedOffer.offerItems,
+        },
+      });
+
+      if (abortController.signal.aborted) return;
+
+      // Check success using isSuccessCode helper
+      const resultCode = undefined; // confirmJourneyChange throws on failure
+      void isSuccessCode(resultCode);
+
+      setResult({ success: true, message: 'Journey change completed successfully.' });
+      setStep('result');
+      onSuccess();
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      console.error('[JourneyChange] Confirm error:', err);
+      setResult({ success: false, message: err instanceof Error ? err.message : ERROR_MESSAGES.JOURNEY_CHANGE_FAILED });
+      setStep('result');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [orderId, transactionId, owner, selectedOffer, quotedPrice, onSuccess]);
+
+  // ============================================================
+  // Navigation
+  // ============================================================
+  const handleBack = useCallback(() => {
+    switch (step) {
+      case 'search':
+        setStep('select');
+        setReshopOffers([]);
+        break;
+      case 'confirm':
+        setStep('search');
+        setSelectedOffer(null);
+        setQuotedPrice(null);
+        setPriceDifference(null);
+        break;
+      default:
+        break;
+    }
+  }, [step]);
+
+  // ============================================================
+  // Render
+  // ============================================================
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b flex items-center justify-between">
+          <h2 className="text-lg font-semibold">
+            {step === 'select' && 'Select Journey'}
+            {step === 'search' && 'Select Flight'}
+            {step === 'confirm' && 'Confirm Change'}
+            {step === 'result' && (result?.success ? 'Change Complete' : 'Change Failed')}
+            {step === 'loading' && 'Processing...'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            aria-label="Close"
+          >
+            &times;
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* Validation Error */}
+          {!validationResult.canChange && (
+            <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-4">
+              {validationResult.reason}
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-4">
+              {error}
+            </div>
+          )}
+
+          {/* Loading */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-3 text-gray-600">Processing...</span>
+            </div>
+          )}
+
+          {/* Step 1: Select Journey */}
+          {step === 'select' && !isLoading && validationResult.canChange && (
+            <div className="space-y-6">
+              <ItinerarySelector
+                itineraries={itineraries}
+                selectedIds={selectedJourneyIds}
+                onSelectionChange={setSelectedJourneyIds}
+                criteriaMap={journeyCriteria}
+                onCriteriaChange={setJourneyCriteria}
+              />
+              <ChangeModeSelector
+                mode={changeMode}
+                onChange={setChangeMode}
+                carrierCode={owner}
+                tripType={tripType}
+              />
+            </div>
+          )}
+
+          {/* Step 2: Search Results */}
+          {step === 'search' && !isLoading && (
+            <FlightOptionList
+              offers={reshopOffers}
+              selectedOffer={selectedOffer}
+              onSelect={handleSelectOffer}
+            />
+          )}
+
+          {/* Step 3: Confirm */}
+          {step === 'confirm' && !isLoading && selectedOffer && (
+            <PriceSummaryCard
+              originalItineraries={itineraries.filter(i => selectedJourneyIds.includes(i.paxJourneyId))}
+              newOffer={selectedOffer}
+              quotedPrice={quotedPrice}
+              priceDifference={priceDifference}
+              carrierCode={owner}
+              onConfirm={handleConfirm}
+            />
+          )}
+
+          {/* Step 4: Result */}
+          {step === 'result' && result && (
+            <div className={`text-center py-8 ${result.success ? 'text-green-600' : 'text-red-600'}`}>
+              <div className="text-4xl mb-4">
+                {result.success ? '✓' : '✕'}
+              </div>
+              <p className="text-lg font-medium">{result.message}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex justify-between">
+          {/* Back Button */}
+          {(step === 'search' || step === 'confirm') && (
+            <button
+              onClick={handleBack}
+              disabled={isLoading}
+              className="px-4 py-2 text-gray-600 hover:text-gray-800 disabled:opacity-50"
+            >
+              Previous
+            </button>
+          )}
+
+          {/* Close/Search Button */}
+          <div className="ml-auto flex gap-2">
+            {step === 'select' && validationResult.canChange && (
+              <button
+                onClick={() => {
+                  if (selectedJourneyIds.length === 0 && changeMode !== 'add') {
+                    setError(ERROR_MESSAGES.JOURNEY_SELECT_REQUIRED);
+                    return;
+                  }
+                  // Validate all selected journeys have criteria
+                  const missingCriteria = selectedJourneyIds.some(id => {
+                    const c = journeyCriteria[id];
+                    return !c || !c.origin || !c.destination || !c.departureDate;
+                  });
+                  if (missingCriteria && changeMode !== 'add') {
+                    setError('Please fill in origin, destination, and date for all selected journeys.');
+                    return;
+                  }
+                  handleSearchFlights();
+                }}
+                disabled={isLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                Search Flights
+              </button>
+            )}
+
+            {step === 'result' && (
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Confirm
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

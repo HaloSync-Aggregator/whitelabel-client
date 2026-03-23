@@ -1,0 +1,261 @@
+/**
+ * Design System Type Definitions for {{TENANT_ID}}
+ * Provides type-safe access to design tokens
+ */
+
+/* Color Types */
+export interface ColorPalette {
+  primary: string;
+  primaryHover: string;
+  secondary: string;
+  accent: string;
+  accentOrange: string;
+  text: TextColors;
+  background: BackgroundColors;
+  border: BorderColors;
+  status: StatusColors;
+  ai: AIColors;
+}
+
+export interface TextColors {
+  primary: string;
+  secondary: string;
+  tertiary: string;
+}
+
+export interface BackgroundColors {
+  primary: string;
+  secondary: string;
+  tertiary: string;
+}
+
+export interface BorderColors {
+  light: string;
+  dark: string;
+}
+
+export interface StatusColors {
+  info: string;
+  success: string;
+  warning: string;
+  error: string;
+}
+
+export interface AIColors {
+  pastel: string;
+  gradientStart: string;
+  gradientEnd: string;
+}
+
+/* Typography Types */
+export interface FontFamily {
+  xs: string;
+  sm: string;
+  base: string;
+  lg: string;
+  xl: string;
+  '2xl': string;
+  '3xl': string;
+  '4xl': string;
+}
+
+export interface FontWeight {
+  normal: number;
+  medium: number;
+  semibold: number;
+  bold: number;
+}
+
+export interface LetterSpacing {
+  tight: string;
+  normal: string;
+  wide: string;
+  wider: string;
+  widest: string;
+}
+
+export interface Typography {
+  fontFamily: string;
+  fontFamilyDisplay: string;
+  fontSize: FontFamily;
+  fontWeight: FontWeight;
+  letterSpacing: LetterSpacing;
+}
+
+/* Spacing Types */
+export interface SpacingScale {
+  xs: string;
+  sm: string;
+  md: string;
+  lg: string;
+  xl: string;
+  '2xl': string;
+}
+
+/* Border Radius Types */
+export interface BorderRadiusScale {
+  sm: string;
+  md: string;
+  lg: string;
+  xl: string;
+  '2xl': string;
+  full: string;
+}
+
+/* Shadow Types */
+export interface Shadows {
+  soft: string;
+  card: string;
+  button: string;
+}
+
+/* Effects Types */
+export interface Effects {
+  backdropBlur: string;
+  aiShimmer: string;
+  aiGradientBorder: {
+    background: string;
+    border: string;
+  };
+}
+
+/* Theme Type */
+export interface DesignTheme {
+  colors: ColorPalette;
+  typography: Typography;
+  spacing: SpacingScale;
+  borderRadius: BorderRadiusScale;
+  shadows: Shadows;
+  effects: Effects;
+}
+
+/* Header Configuration Types */
+export interface HeaderRow {
+  id: string;
+  height: number;
+  background: string;
+  backdropBlur: boolean;
+  borderBottom: boolean;
+  items: string[];
+}
+
+export interface BrandConfig {
+  type: 'logo-text';
+  logo: {
+    src: string;
+    height: number;
+    fallback: string;
+  };
+  text: {
+    name: string;
+    subtitle: string;
+    subtitleStyle: {
+      dot: boolean;
+      uppercase: boolean;
+      letterSpacing: string;
+    };
+  };
+}
+
+export interface ActionItem {
+  type: 'icon-button';
+  icon: string;
+  style: 'ghost';
+}
+
+export interface ActionsConfig {
+  position: 'right';
+  items: ActionItem[];
+}
+
+export interface BottomNavItem {
+  icon: string;
+  label: string;
+  href: string;
+  active?: boolean;
+  filled?: boolean;
+  style?: 'fab';
+  highlight?: boolean;
+}
+
+export interface BottomNavigationConfig {
+  enabled: boolean;
+  style: 'floating';
+  background: string;
+  backdropBlur: boolean;
+  items: BottomNavItem[];
+}
+
+export interface ResultsHeaderConfig {
+  enabled: boolean;
+  style: 'compact';
+  backButton: boolean;
+  title: {
+    primary: string;
+    secondary: string;
+  };
+  editButton: {
+    icon: string;
+    style: 'ghost';
+  };
+}
+
+export interface HeaderConfig {
+  structure: '1row';
+  style: 'mobile-first';
+  brand: BrandConfig;
+  rows: HeaderRow[];
+  actions: ActionsConfig;
+  bottomNavigation: BottomNavigationConfig;
+  resultsHeader: ResultsHeaderConfig;
+}
+
+/* Footer Configuration Types */
+export interface FooterLinkItem {
+  label: string;
+  href: string;
+}
+
+export interface FooterLinkColumn {
+  title: string;
+  items: FooterLinkItem[];
+}
+
+export interface FooterBrand {
+  logo: {
+    src: string;
+    height: number;
+  };
+  description: string;
+}
+
+export interface FooterLinks {
+  columns: FooterLinkColumn[];
+}
+
+export interface FooterCopyright {
+  text: string;
+  showYear: boolean;
+}
+
+export interface FooterSections {
+  brand: FooterBrand;
+  links: FooterLinks;
+  copyright: FooterCopyright;
+}
+
+export interface FooterConfig {
+  style: 'minimal';
+  background: string;
+  padding: string;
+  sections: FooterSections;
+}
+
+/* Tenant Configuration Type */
+export interface TenantConfig {
+  tenantId: string;
+  tenantName: string;
+  theme: DesignTheme;
+  header: HeaderConfig;
+  footer: FooterConfig;
+}

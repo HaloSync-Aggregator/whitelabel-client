@@ -1,0 +1,603 @@
+# carrier-support-matrix.yaml
+# PolarHub API - Carrier Support Matrix for AI Reference
+# Last Updated: 2025-01
+
+meta:
+ support_levels:
+ PROD: "Production supported"
+ SANDBOX: "Sandbox only"
+ PARTIAL: "Partially supported"
+ NONE: "Not supported"
+ NA: "Not applicable"
+
+# ============================================================
+# WORKFLOW DEFINITIONS
+# ============================================================
+workflows:
+ prime_booking:
+ deferred_ticketing:
+ id: "WF_PB_DEFERRED"
+ description: "Create booking, ticket later"
+ api_sequence:
+ - AirShopping
+ - OfferPrice
+ - OrderCreate
+ requires_fop: false
+
+ immediate_ticketing:
+ id: "WF_PB_IMMEDIATE"
+ description: "Book and ticket simultaneously"
+ api_sequence:
+ - AirShopping
+ - OfferPrice
+ - OrderCreate
+ requires_fop: true
+
+ seat_only:
+ id: "WF_PB_SEAT"
+ description: "Booking with seat selection"
+ api_sequence:
+ - AirShopping
+ - OfferPrice
+ - SeatAvailability
+ - OrderCreate
+ requires_fop: true
+
+ seat_with_reprice:
+ id: "WF_PB_SEAT_REPRICE"
+ description: "Requires OfferPrice re-call after seat selection (AFKL, TR)"
+ api_sequence:
+ - AirShopping
+ - OfferPrice
+ - SeatAvailability
+ - OfferPrice # Recalculate with seat included
+ - OrderCreate
+ requires_fop: true
+ carriers: [AF, KL, TR]
+
+ service_only:
+ id: "WF_PB_SERVICE"
+ description: "Booking with ancillary services"
+ api_sequence:
+ - AirShopping
+ - OfferPrice # 1st: Confirm offer price (obtain ResponseID)
+ - ServiceList # Query ancillary service list (requires ResponseID, OfferID)
+ - OfferPrice # 2nd: Recalculate price with services
+ - OrderCreate
+ requires_fop: true
+ notes:
+ - "ServiceList call requires ResponseID and OfferID, so OfferPrice must be called first"
+ - "After service selection, re-call OfferPrice to finalize the price"
+
+ seat_and_service:
+ id: "WF_PB_SEAT_SERVICE"
+ description: "Booking with seat + ancillary services"
+ api_sequence:
+ - AirShopping
+ - OfferPrice # 1st: Confirm offer price (obtain ResponseID)
+ - SeatAvailability # Seat availability query
+ - ServiceList # Ancillary service list query
+ - OfferPrice # 2nd: Recalculate price with seat + services
+ - OrderCreate
+ requires_fop: true
+ notes:
+ - "Both SeatAvailability and ServiceList require ResponseID"
+ - "After seat + service selection, re-call OfferPrice to finalize the price"
+
+ post_booking_held:
+ seat_change:
+ id: "WF_HELD_SEAT"
+ description: "Change seat while in Hold status"
+ api_sequence:
+ - OrderRetrieve
+ - SeatAvailability
+ - OrderChange
+
+ add_service:
+ id: "WF_HELD_SERVICE"
+ description: "Add service while in Hold status"
+ api_sequence:
+ - OrderRetrieve
+ - ServiceList
+ - OrderQuote
+ - OrderChange
+
+ confirm:
+ id: "WF_HELD_CONFIRM"
+ description: "Confirm held booking (ticketing)"
+ api_sequence:
+ - OrderRetrieve
+ - OrderChange
+ requires_fop: true
+
+ cancel:
+ id: "WF_HELD_CANCEL"
+ description: "Cancel held booking"
+ api_sequence:
+ - OrderRetrieve
+ - OrderCancel
+
+ itinerary_change:
+ id: "WF_HELD_ITIN"
+ description: "Change itinerary while in Hold status"
+ api_sequence:
+ - OrderRetrieve
+ - OrderReshop
+ - OrderChange
+
+ pax_info_change:
+ id: "WF_HELD_PAX"
+ description: "Change passenger info while in Hold status"
+ api_sequence:
+ - OrderRetrieve
+ - OrderChange
+
+ pnr_split:
+ id: "WF_HELD_SPLIT"
+ description: "PNR split"
+ api_sequence:
+ - OrderRetrieve
+ - OrderChange
+
+ post_booking_ticketed:
+ seat_change:
+ id: "WF_TKT_SEAT"
+ description: "Change seat after ticketing"
+ api_sequence:
+ - OrderRetrieve
+ - SeatAvailability
+ - OrderQuote
+ - OrderChange
+
+ add_service:
+ id: "WF_TKT_SERVICE"
+ description: "Add service after ticketing"
+ api_sequence:
+ - OrderRetrieve
+ - ServiceList
+ - OrderQuote
+ - OrderChange
+
+ voluntary_change:
+ id: "WF_TKT_VOLCHANGE"
+ description: "Voluntary itinerary change"
+ api_sequence:
+ - OrderRetrieve
+ - OrderReshop
+ - OrderChange
+
+ voluntary_refund:
+ id: "WF_TKT_REFUND"
+ description: "Voluntary refund"
+ api_sequence:
+ - OrderRetrieve
+ - OrderReshop
+ - OrderCancel
+
+ ocn_accept:
+ id: "WF_TKT_OCN"
+ description: "Accept involuntary change (OCN)"
+ api_sequence:
+ - OrderRetrieve
+ - OrderChange
+
+# ============================================================
+# CARRIER SUPPORT MATRIX
+# ============================================================
+carriers:
+ AA:
+ name: "American Airlines"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: NONE
+ WF_PB_SERVICE: NONE
+ WF_PB_SEAT_SERVICE: NONE
+ WF_HELD_SEAT: NONE
+ WF_HELD_SERVICE: NONE
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: NONE
+ WF_HELD_SPLIT: NONE
+ WF_TKT_SEAT: NONE
+ WF_TKT_SERVICE: NONE
+ WF_TKT_VOLCHANGE: NONE
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: NONE
+
+ AF:
+ name: "Air France"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: NONE
+ WF_PB_SEAT_REPRICE: PROD # seat selection after OfferPrice 재call required
+ WF_PB_SERVICE: PROD
+ WF_PB_SEAT_SERVICE: PARTIAL
+ WF_HELD_SEAT: PROD
+ WF_HELD_SERVICE: PROD
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: PROD
+ WF_HELD_PAX: PROD
+ WF_HELD_SPLIT: NONE
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: PROD
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: PROD
+
+ AY:
+ name: "Finnair"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: PROD
+ WF_PB_SERVICE: PROD
+ WF_PB_SEAT_SERVICE: PROD
+ WF_HELD_SEAT: PROD
+ WF_HELD_SERVICE: PROD
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: PROD
+ WF_HELD_PAX: PROD
+ WF_HELD_SPLIT: PROD
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: PROD
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: PROD
+
+ BA:
+ name: "British Airways"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: NONE
+ WF_PB_SERVICE: NONE
+ WF_PB_SEAT_SERVICE: NONE
+ WF_HELD_SEAT: NONE
+ WF_HELD_SERVICE: NONE
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: NONE
+ WF_HELD_SPLIT: NONE
+ WF_TKT_SEAT: NONE
+ WF_TKT_SERVICE: NONE
+ WF_TKT_VOLCHANGE: NONE
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: NONE
+
+ EK:
+ name: "Emirates"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: NONE
+ WF_PB_SERVICE: NONE
+ WF_PB_SEAT_SERVICE: NONE
+ WF_HELD_SEAT: NONE
+ WF_HELD_SERVICE: NONE
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: NONE
+ WF_HELD_SPLIT: NONE
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: NONE
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: NONE
+
+ HA:
+ name: "Hawaiian Airlines"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: PROD
+ WF_PB_SERVICE: PROD
+ WF_PB_SEAT_SERVICE: PROD
+ WF_HELD_SEAT: PROD
+ WF_HELD_SERVICE: PROD
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: PROD
+ WF_HELD_SPLIT: PROD
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: PROD
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: PROD
+ notes:
+ - "OrderRetrieve confirmation step required"
+
+ KE:
+ name: "Korean Air"
+ support:
+ WF_PB_DEFERRED: NONE
+ WF_PB_IMMEDIATE: NONE
+ WF_PB_SEAT: NONE
+ WF_PB_SERVICE: NONE
+ WF_PB_SEAT_SERVICE: NONE
+ WF_HELD_SEAT: NONE
+ WF_HELD_SERVICE: NONE
+ WF_HELD_CONFIRM: NONE
+ WF_HELD_CANCEL: NONE
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: NONE
+ WF_HELD_SPLIT: NONE
+ WF_TKT_SEAT: NONE
+ WF_TKT_SERVICE: NONE
+ WF_TKT_VOLCHANGE: NONE
+ WF_TKT_REFUND: NONE
+ WF_TKT_OCN: NONE
+ notes:
+ - "Minimal support across all features"
+
+ KL:
+ name: "KLM"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: NONE
+ WF_PB_SEAT_REPRICE: PROD # seat selection after OfferPrice 재call required
+ WF_PB_SERVICE: PROD
+ WF_PB_SEAT_SERVICE: PARTIAL
+ WF_HELD_SEAT: PROD
+ WF_HELD_SERVICE: PROD
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: PROD
+ WF_HELD_PAX: PROD
+ WF_HELD_SPLIT: PROD
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: PROD
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: PROD
+
+ LH:
+ name: "Lufthansa"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: NONE
+ WF_PB_SERVICE: NONE
+ WF_PB_SEAT_SERVICE: NONE
+ WF_HELD_SEAT: NONE
+ WF_HELD_SERVICE: NONE
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: NONE
+ WF_HELD_SPLIT: NONE
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: NONE
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: NONE
+
+ QR:
+ name: "Qatar Airways"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: PROD
+ WF_PB_SERVICE: PROD
+ WF_PB_SEAT_SERVICE: NONE
+ WF_HELD_SEAT: PROD
+ WF_HELD_SERVICE: PROD
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: NONE
+ WF_HELD_SPLIT: NONE
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: NONE
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: NONE
+
+ SQ:
+ name: "Singapore Airlines"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: PROD
+ WF_PB_SERVICE: PROD
+ WF_PB_SEAT_SERVICE: PROD
+ WF_HELD_SEAT: PROD
+ WF_HELD_SERVICE: PROD
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: PROD
+ WF_HELD_PAX: PROD
+ WF_HELD_SPLIT: PROD
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: PROD
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: PROD
+
+ TK:
+ name: "Turkish Airlines"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: PROD
+ WF_PB_SERVICE: PROD
+ WF_PB_SEAT_SERVICE: PROD
+ WF_HELD_SEAT: PROD
+ WF_HELD_SERVICE: PROD
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: PROD
+ WF_HELD_SPLIT: PROD
+ WF_TKT_SEAT: PROD
+ WF_TKT_SERVICE: PROD
+ WF_TKT_VOLCHANGE: PROD
+ WF_TKT_REFUND: PROD
+ WF_TKT_OCN: NONE
+ notes:
+ - "OrderRetrieve confirmation step required"
+
+ TR:
+ name: "Scoot"
+ support:
+ WF_PB_DEFERRED: PROD
+ WF_PB_IMMEDIATE: PROD
+ WF_PB_SEAT: NONE
+ WF_PB_SEAT_REPRICE: PROD # seat selection after OfferPrice 재call required
+ WF_PB_SERVICE: NONE
+ WF_PB_SEAT_SERVICE: PROD
+ WF_HELD_SEAT: PROD
+ WF_HELD_SERVICE: PROD
+ WF_HELD_CONFIRM: PROD
+ WF_HELD_CANCEL: PROD
+ WF_HELD_ITIN: NONE
+ WF_HELD_PAX: NONE
+ WF_HELD_SPLIT: PROD
+ WF_TKT_SEAT: NONE
+ WF_TKT_SERVICE: NONE
+ WF_TKT_VOLCHANGE: NONE
+ WF_TKT_REFUND: NONE # payment after refund (티켓 미발급)
+ WF_TKT_OCN: NONE
+ notes:
+ - "Basic operations only"
+ - "No ticket issuance after payment (TicketDocList empty)"
+ - "Refund NOT available after payment - only HELD_CANCEL supported"
+
+ AS:
+ name: "Alaska Airlines"
+ support:
+ WF_PB_DEFERRED: SANDBOX
+ WF_PB_IMMEDIATE: SANDBOX
+ WF_PB_SEAT: SANDBOX
+ WF_PB_SERVICE: SANDBOX
+ WF_PB_SEAT_SERVICE: SANDBOX
+ WF_HELD_SEAT: SANDBOX
+ WF_HELD_SERVICE: SANDBOX
+ WF_HELD_CONFIRM: SANDBOX
+ WF_HELD_CANCEL: SANDBOX
+ WF_HELD_ITIN: SANDBOX
+ WF_HELD_PAX: SANDBOX
+ WF_HELD_SPLIT: SANDBOX
+ WF_TKT_SEAT: SANDBOX
+ WF_TKT_SERVICE: SANDBOX
+ WF_TKT_VOLCHANGE: SANDBOX
+ WF_TKT_REFUND: SANDBOX
+ WF_TKT_OCN: SANDBOX
+ notes:
+ - "All features sandbox only"
+ - "Additional OrderRetrieve required post-booking"
+
+# ============================================================
+# LOOKUP FUNCTIONS (Pseudo-code for AI reference)
+# ============================================================
+lookup_helpers:
+ get_workflow_for_action:
+ description: "주진 amount션 vs workflow return"
+ logic: |
+ if action == "book_with_seat":
+ return workflows.prime_booking.seat_only
+ elif action == "book_with_service":
+ return workflows.prime_booking.service_only
+ elif action == "refund":
+ return workflows.post_booking_ticketed.voluntary_refund
+ # ... etc
+
+ is_supported:
+ description: "airline specific workflow support 여부 confirm"
+ logic: |
+ def is_supported(carrier_code, workflow_id):
+ level = carriers[carrier_code].support[workflow_id]
+ return level in ["PROD", "PARTIAL"]
+
+ get_api_sequence:
+ description: "workflow API call order return"
+ logic: |
+ def get_api_sequence(workflow_id):
+ for category in workflows:
+ for wf_name, wf_data in workflows[category].items():
+ if wf_data.id == workflow_id:
+ return wf_data.api_sequence
+ return None
+
+# ============================================================
+# DECISION TREE FOR WORKFLOW SELECTION
+# ============================================================
+decision_tree:
+ booking_phase:
+ - condition: "order_status == null"
+ phase: "prime_booking"
+ - condition: "order_status == 'HELD'"
+ phase: "post_booking_held"
+ - condition: "order_status == 'TICKETED'"
+ phase: "post_booking_ticketed"
+
+ prime_booking_workflow:
+ - condition: "!needs_seat && !needs_service && !immediate_ticketing"
+ workflow: "WF_PB_DEFERRED"
+ - condition: "!needs_seat && !needs_service && immediate_ticketing"
+ workflow: "WF_PB_IMMEDIATE"
+ - condition: "needs_seat && !needs_service"
+ workflow: "WF_PB_SEAT"
+ - condition: "!needs_seat && needs_service"
+ workflow: "WF_PB_SERVICE"
+ - condition: "needs_seat && needs_service"
+ workflow: "WF_PB_SEAT_SERVICE"
+
+ post_booking_workflow:
+ - condition: "action == 'change_seat'"
+ workflow_held: "WF_HELD_SEAT"
+ workflow_ticketed: "WF_TKT_SEAT"
+ - condition: "action == 'add_service'"
+ workflow_held: "WF_HELD_SERVICE"
+ workflow_ticketed: "WF_TKT_SERVICE"
+ - condition: "action == 'confirm'"
+ workflow_held: "WF_HELD_CONFIRM"
+ - condition: "action == 'cancel'"
+ workflow_held: "WF_HELD_CANCEL"
+ - condition: "action == 'change_itinerary'"
+ workflow_held: "WF_HELD_ITIN"
+ workflow_ticketed: "WF_TKT_VOLCHANGE"
+ - condition: "action == 'refund'"
+ workflow_ticketed: "WF_TKT_REFUND"
+
+# ============================================================
+# FEATURE GROUPS (for quick filtering)
+# ============================================================
+feature_groups:
+ full_support:
+ description: "모든 function support airline"
+ carriers: [AY, SQ, TK, KL]
+
+ seat_reprice_required:
+ description: "booking seat purchase after OfferPrice 재call required"
+ carriers: [AF, KL, TR]
+ workflow: "WF_PB_SEAT_REPRICE"
+ api_sequence: "AirShopping → OfferPrice → SeatAvailability → OfferPrice → OrderCreate"
+
+ ancillary_support:
+ description: "부service support airline"
+ carriers: [AF, AY, HA, KL, QR, SQ, TK]
+
+ post_booking_change:
+ description: "after ticketing change support airline"
+ carriers: [AF, AY, HA, KL, SQ, TK]
+
+ basic_only:
+ description: "default booking/ticketing support"
+ carriers: [AA, BA, LH]
+
+ sandbox_only:
+ description: "샌드box support"
+ carriers: [AS]
+
+ not_supported:
+ description: "미support airline"
+ carriers: [KE]

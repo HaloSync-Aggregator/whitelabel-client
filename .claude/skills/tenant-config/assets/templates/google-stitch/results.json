@@ -1,0 +1,185 @@
+{
+  "page": "search-results",
+  "layout": {
+    "type": "single-column",
+    "maxWidth": "448px",
+    "padding": "16px",
+    "gap": "16px",
+    "style": "mobile-first"
+  },
+  "sections": {
+    "searchForm": {
+      "enabled": true,
+      "position": "top",
+      "style": "ai-prompt",
+      "background": {
+        "type": "solid",
+        "color": "#FFFFFF"
+      },
+      "aiGradientBorder": true,
+      "components": {
+        "smartBadge": {
+          "icon": "auto_awesome",
+          "text": "Smart Prompt",
+          "style": "uppercase-tracking"
+        },
+        "textarea": {
+          "placeholder": "Find a flight to Tokyo next Friday for 3 days...",
+          "minHeight": "120px"
+        },
+        "actions": {
+          "left": [
+            { "icon": "mic", "style": "icon-button" },
+            { "icon": "calendar_month", "style": "icon-button" }
+          ],
+          "right": {
+            "label": "Search",
+            "icon": "arrow_forward_ios",
+            "style": "primary"
+          }
+        }
+      }
+    },
+    "aiRecommended": {
+      "enabled": true,
+      "position": "top",
+      "background": {
+        "type": "pastel",
+        "color": "#E0F2FE"
+      },
+      "shimmerEffect": true,
+      "borderRadius": "24px",
+      "content": {
+        "badge": {
+          "text": "Personalized Value",
+          "style": "uppercase-tracking",
+          "color": "#0369A1"
+        },
+        "title": "Smart Bundle: {bundleName}",
+        "price": {
+          "position": "top-right",
+          "showAllInclusive": true
+        },
+        "features": {
+          "iconStyle": "rounded-box",
+          "iconBackground": "rgba(255, 255, 255, 0.6)"
+        },
+        "aiMessage": {
+          "enabled": true,
+          "background": "rgba(255, 255, 255, 0.4)",
+          "borderRadius": "16px"
+        },
+        "actions": {
+          "primary": "Select Bundle",
+          "secondary": {
+            "icon": "info",
+            "style": "ghost"
+          }
+        }
+      }
+    },
+    "flightList": {
+      "enabled": true,
+      "title": "All Flight Options",
+      "subtitle": "Sorted by {sortBy}",
+      "gap": "16px"
+    },
+    "filters": {
+      "position": "top-sticky",
+      "style": "horizontal-scroll"
+    }
+  },
+  "sortOptions": {
+    "position": "inline-title",
+    "style": "text",
+    "options": [
+      { "value": "price", "label": "Price", "default": true },
+      { "value": "duration", "label": "Duration" },
+      { "value": "departure", "label": "Departure" },
+      { "value": "arrival", "label": "Arrival" },
+      { "value": "recommended", "label": "Recommended" }
+    ]
+  },
+  "flightCard": {
+    "style": "rounded-card",
+    "borderRadius": "24px",
+    "padding": "20px",
+    "shadow": "soft",
+    "showAirlineLogo": true,
+    "airlineLogo": {
+      "size": 40,
+      "borderRadius": "12px",
+      "background": "#F8FAFC"
+    },
+    "showBadge": true,
+    "badges": {
+      "fastest": {
+        "text": "Fastest",
+        "background": "#ECFDF5",
+        "color": "#059669"
+      },
+      "highRated": {
+        "text": "High Rated",
+        "background": "#FFF7ED",
+        "color": "#EA580C"
+      },
+      "cheapest": {
+        "text": "Best Price",
+        "background": "#EFF6FF",
+        "color": "#2563EB"
+      }
+    },
+    "flightPath": {
+      "style": "dotted-line",
+      "showPlaneIcon": true,
+      "planeRotation": 90
+    },
+    "timeDisplay": {
+      "fontSize": "20px",
+      "fontWeight": "bold",
+      "airportCode": {
+        "style": "uppercase-tracking",
+        "fontSize": "10px",
+        "color": "#94A3B8"
+      }
+    },
+    "duration": {
+      "position": "center",
+      "style": "uppercase-tracking",
+      "showStops": true
+    },
+    "priceDisplay": {
+      "position": "bottom-left",
+      "label": "From",
+      "labelStyle": "uppercase-tracking",
+      "fontSize": "20px",
+      "fontWeight": "bold"
+    },
+    "selectButton": {
+      "label": "Details",
+      "style": "outline",
+      "borderRadius": "12px"
+    },
+    "expandable": {
+      "enabled": false
+    },
+    "activeState": {
+      "scale": 0.98,
+      "transition": "transform"
+    }
+  },
+  "emptyState": {
+    "icon": "flight",
+    "title": "No flights found",
+    "description": "Try adjusting your search or dates",
+    "action": {
+      "label": "Modify Search",
+      "style": "primary"
+    }
+  },
+  "loading": {
+    "type": "skeleton",
+    "count": 3,
+    "cardStyle": "rounded"
+  }
+}

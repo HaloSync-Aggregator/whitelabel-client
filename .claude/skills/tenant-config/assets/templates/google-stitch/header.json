@@ -1,0 +1,76 @@
+{
+  "structure": "1row",
+  "style": "mobile-first",
+  "rows": [
+    {
+      "id": "main",
+      "height": 56,
+      "background": "rgba(255, 255, 255, 0.8)",
+      "backdropBlur": true,
+      "borderBottom": true,
+      "items": ["brand", "actions"]
+    }
+  ],
+  "brand": {
+    "type": "avatar-text",
+    "avatar": {
+      "src": "brand-avatar.png",
+      "size": 40,
+      "shape": "circle",
+      "border": true
+    },
+    "text": {
+      "name": "{tenant_name}",
+      "subtitle": "AI Assistant",
+      "subtitleStyle": {
+        "dot": true,
+        "dotColor": "#3B82F6",
+        "uppercase": true,
+        "letterSpacing": "wider"
+      }
+    }
+  },
+  "actions": {
+    "position": "right",
+    "items": [
+      {
+        "type": "icon-button",
+        "icon": "notifications",
+        "style": "ghost"
+      }
+    ]
+  },
+  "bottomNavigation": {
+    "enabled": true,
+    "style": "floating",
+    "background": "rgba(255, 255, 255, 0.8)",
+    "backdropBlur": true,
+    "items": [
+      { "icon": "home", "label": "Home", "href": "/", "active": true, "filled": true },
+      { "icon": "airplane_ticket", "label": "Bookings", "href": "/bookings" },
+      {
+        "icon": "auto_awesome",
+        "label": "AI",
+        "href": "/ai",
+        "style": "fab",
+        "highlight": true,
+        "pulse": true
+      },
+      { "icon": "explore", "label": "Explore", "href": "/explore" },
+      { "icon": "person", "label": "Profile", "href": "/profile" }
+    ]
+  },
+  "resultsHeader": {
+    "enabled": true,
+    "style": "compact",
+    "backButton": true,
+    "title": {
+      "primary": "Found {count} options",
+      "secondary": "{origin} to {destination} • {dates}"
+    },
+    "editButton": {
+      "icon": "edit_note",
+      "style": "ghost"
+    }
+  }
+}

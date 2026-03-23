@@ -1,0 +1,71 @@
+{
+  "page": "search-results",
+  "layout": {
+    "type": "2-column",
+    "maxWidth": "1280px",
+    "padding": "32px",
+    "gap": "24px"
+  },
+  "sections": {
+    "searchForm": {
+      "enabled": true,
+      "position": "top",
+      "background": {
+        "type": "gradient",
+        "colors": ["#EEF2FF", "#F5F3FF"],
+        "direction": "to-right"
+      },
+      "padding": "32px",
+      "sticky": false
+    },
+    "leftColumn": {
+      "width": "260px",
+      "content": ["filters"]
+    },
+    "mainColumn": {
+      "width": "flex-1",
+      "content": ["sortOptions", "flightList"]
+    }
+  },
+  "sortOptions": {
+    "position": "top",
+    "style": "button-group",
+    "options": [
+ { "value": "recommended", "label": "Recommended", "default": true },
+      { "value": "price", "label": "Lowest price" },
+ { "value": "duration", "label": "최단Time" },
+ { "value": "departureEarly", "label": "이른Departure" },
+ { "value": "arrivalEarly", "label": "이른Arrival" }
+    ]
+  },
+  "flightCard": {
+    "style": "horizontal",
+    "showAirlineLogo": true,
+    "showTerminal": true,
+    "showBaggage": true,
+    "showFareType": true,
+    "pricePosition": "right",
+    "selectButton": {
+      "label": "Select",
+      "style": "primary"
+    },
+    "expandable": {
+      "enabled": true,
+      "showFareDetails": true,
+      "showSegmentDetails": true
+    }
+  },
+  "emptyState": {
+    "icon": "plane",
+    "title": "Search results is not available",
+ "description": "Different Date나 Conditionto Search해 보세요.",
+    "action": {
+      "label": "Search Condition Change",
+      "type": "scrollToTop"
+    }
+  },
+  "loading": {
+    "type": "skeleton",
+    "count": 5
+  }
+}

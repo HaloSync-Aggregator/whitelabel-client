@@ -1,0 +1,24 @@
+/**
+ * @template App.tsx
+ * @version 4.1.0
+ * @description Root App component for {{TENANT_ID}} tenant.
+ *              Defines client-side routes using react-router-dom.
+ */
+import { Routes, Route } from 'react-router-dom';
+import HomePage from './app/page';
+import ResultsPage from './app/results/page';
+import BookingPage from './app/booking/page';
+import BookingDetailPage from './app/booking/[id]/page';
+import CancelPage from './app/booking/[id]/cancel/page';
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/results" element={<ResultsPage />} />
+      <Route path="/booking" element={<BookingPage />} />
+      <Route path="/booking/:id" element={<BookingDetailPage />} />
+      <Route path="/booking/:id/cancel" element={<CancelPage />} />
+    </Routes>
+  );
+}

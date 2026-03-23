@@ -1,0 +1,30 @@
+# @template nginx.conf
+# @version 4.1.0
+# @description Nginx configuration for {{TENANT_ID}} tenant app.
+#              SPA fallback, middleware proxy, and static asset caching.
+
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # SPA fallback: all routes serve index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy middleware API (for non-CloudFront deployments)
+    location /middleware/ {
+        proxy_pass http://middleware-backend:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Cache static assets
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}

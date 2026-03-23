@@ -1,0 +1,130 @@
+/**
+ * Tenant Configuration for {{TENANT_ID}}
+ * Auto-generated from design-system.json and config files
+ */
+
+export const TENANT_ID = '{{TENANT_ID}}';
+export const TENANT_NAME = '{{TENANT_ID}} Travel';
+
+/* API Configuration */
+export const POINT_OF_SALE = 'KR'; // ISO 3166-1 alpha-2 country code
+export const AGENCY_ID = '{{TENANT_ID}}';
+export const SITE_CODE = '01';
+export const AGENCY_NAME = '{{TENANT_ID}} Travel Agency';
+
+/* Color Tokens */
+export const COLORS = {
+  // Brand colors
+  primary: '#1a73e8',
+  primaryHover: '#1557b0',
+  secondary: '#ea4335',
+  accent: '#34a853',
+  accentOrange: '#fbbc04',
+
+  // Semantic colors (flat)
+  foreground: '#202124',
+  muted: '#5f6368',
+  surface: '#F8F9FA',
+
+  // Text variants
+  text: {
+    primary: '#202124',
+    secondary: '#5f6368',
+    tertiary: '#80868b',
+  },
+
+  // Background variants
+  background: {
+    primary: '#FFFFFF',
+    secondary: '#F8F9FA',
+    tertiary: '#F1F3F4',
+  },
+
+  // Border variants
+  border: {
+    light: '#E8EAED',
+    dark: '#DADCE0',
+  },
+
+  // Status colors
+  status: {
+    info: '#1a73e8',
+    success: '#34a853',
+    warning: '#fbbc04',
+    error: '#ea4335',
+  },
+
+  // AI-specific colors
+  ai: {
+    pastel: '#E8F0FE',
+    gradientStart: '#1a73e8',
+    gradientEnd: '#34a853',
+  },
+} as const;
+
+/* Typography Tokens */
+export const TYPOGRAPHY = {
+  fontFamily: 'Google Sans, Roboto, -apple-system, BlinkMacSystemFont, sans-serif',
+  fontFamilyDisplay: 'Google Sans Display, sans-serif',
+  fontSize: {
+    xs: '11px',
+    sm: '12px',
+    base: '14px',
+    lg: '16px',
+    xl: '18px',
+    '2xl': '22px',
+    '3xl': '28px',
+    '4xl': '36px',
+  },
+  fontWeight: {
+    normal: 400,
+    medium: 500,
+    semibold: 600,
+    bold: 700,
+  },
+  letterSpacing: {
+    tight: '-0.01em',
+    normal: '0',
+    wide: '0.025em',
+    wider: '0.05em',
+    widest: '0.1em',
+  },
+} as const;
+
+/* Spacing Tokens */
+export const SPACING = {
+  xs: '4px',
+  sm: '8px',
+  md: '16px',
+  lg: '24px',
+  xl: '32px',
+  '2xl': '48px',
+} as const;
+
+/* Border Radius Tokens */
+export const BORDER_RADIUS = {
+  sm: '4px',
+  md: '8px',
+  lg: '12px',
+  xl: '16px',
+  '2xl': '24px',
+  full: '9999px',
+} as const;
+
+/* Shadow Tokens */
+export const SHADOWS = {
+  soft: '0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)',
+  card: '0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15)',
+  button: '0 1px 3px 0 rgba(26,115,232,0.3)',
+} as const;
+
+/* Effects Tokens */
+export const EFFECTS = {
+  backdropBlur: 'blur(12px)',
+  aiShimmer: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent)',
+  aiGradientBorder: {
+    background:
+      'linear-gradient(white, white) padding-box, linear-gradient(to right, #1a73e8, #34a853) border-box',
+    border: '2px solid transparent',
+  },
+} as const;

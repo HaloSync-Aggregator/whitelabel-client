@@ -1,0 +1,68 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Next.js
+.next/
+out/
+build/
+.env
+.env*.local
+.envrc
+.vercel
+
+# General
+dist/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+
+# Java / Maven
+*.class
+*.jar
+target/
+*.war
+
+# Testing
+TEST*.xml
+
+# Apps
+*.app
+*.exe
+
+# Large media files
+*.mp4
+*.tiff
+*.avi
+*.flv
+*.mov
+*.wmv
+apps/TSDV001-whitelabel.zip
+
+# Private API response samples (large, airline-specific)
+.claude/assets/plan/api-ui-mapping/journey-change-ex/
+.claude/assets/plan/api-ui-mapping/response-sample/
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Local agent workspace artifacts
+.agents/
+
+# Test results (generated, not source)
+scripts/test/**/results/
+
+# TypeScript build info
+*.tsbuildinfo
+test-results/

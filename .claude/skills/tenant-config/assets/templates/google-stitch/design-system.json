@@ -1,0 +1,90 @@
+{
+  "colors": {
+    "primary": "#0066FF",
+    "primaryHover": "#0052CC",
+    "secondary": "#134658",
+    "accent": "#00C2FF",
+    "accentOrange": "#F97316",
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#64748B",
+      "tertiary": "#94A3B8"
+    },
+    "background": {
+      "primary": "#FFFFFF",
+      "secondary": "#F9FAFB",
+      "tertiary": "#F8FAFC"
+    },
+    "border": {
+      "light": "#E5E7EB",
+      "dark": "#CBD5E1"
+    },
+    "status": {
+      "info": "#3B82F6",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444"
+    },
+    "ai": {
+      "pastel": "#E0F2FE",
+      "gradient": ["#0066FF", "#00C2FF"]
+    }
+  },
+  "typography": {
+    "fontFamily": "Plus Jakarta Sans, -apple-system, BlinkMacSystemFont, sans-serif",
+    "fontFamilyDisplay": "Space Grotesk, sans-serif",
+    "fontSize": {
+      "xs": "10px",
+      "sm": "12px",
+      "base": "14px",
+      "lg": "16px",
+      "xl": "18px",
+      "2xl": "20px",
+      "3xl": "24px",
+      "4xl": "38px"
+    },
+    "fontWeight": {
+      "normal": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700,
+      "extrabold": 800
+    },
+    "letterSpacing": {
+      "tight": "-0.02em",
+      "normal": "0",
+      "wide": "0.05em",
+      "wider": "0.1em",
+      "widest": "0.15em"
+    }
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px",
+    "xl": "32px",
+    "2xl": "48px"
+  },
+  "borderRadius": {
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "xl": "16px",
+    "2xl": "24px",
+    "full": "9999px"
+  },
+  "shadows": {
+    "soft": "0 4px 20px -2px rgba(0, 102, 255, 0.08)",
+    "card": "0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 10px -2px rgba(0, 0, 0, 0.03)",
+    "button": "0 10px 25px -5px rgba(0, 102, 255, 0.3)"
+  },
+  "effects": {
+    "aiGradientBorder": {
+      "background": "linear-gradient(white, white) padding-box, linear-gradient(to right, #0066FF, #00C2FF) border-box",
+      "border": "2px solid transparent"
+    },
+    "backdropBlur": "blur(12px)",
+    "aiShimmer": "linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent)"
+  }
+}

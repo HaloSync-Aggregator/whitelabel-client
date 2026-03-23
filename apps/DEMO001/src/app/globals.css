@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Semantic colors */
+  --color-background: #FFFFFF;
+  --color-surface: #F8F9FA;
+  --color-foreground: #202124;
+  --color-muted: #5f6368;
+  --color-border: #DADCE0;
+
+  /* Brand colors */
+  --color-primary: #1a73e8;
+  --color-primary-hover: #1557b0;
+  --color-secondary: #ea4335;
+  --color-accent: #34a853;
+  --color-accent-orange: #fbbc04;
+
+  /* Text colors */
+  --color-text-primary: #202124;
+  --color-text-secondary: #5f6368;
+  --color-text-tertiary: #80868b;
+
+  /* Background colors */
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F8F9FA;
+  --color-bg-tertiary: #F1F3F4;
+
+  /* Border colors */
+  --color-border-light: #E8EAED;
+  --color-border-dark: #DADCE0;
+
+  /* Status colors */
+  --color-info: #1a73e8;
+  --color-success: #34a853;
+  --color-warning: #fbbc04;
+  --color-error: #ea4335;
+
+  /* AI colors */
+  --color-ai-pastel: #E8F0FE;
+
+  /* Typography */
+  --font-primary: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-secondary: 'Google Sans Display', sans-serif;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+
+  /* Effects */
+  --backdrop-blur: blur(12px);
+}
+
+body {
+  font-family: var(--font-primary);
+  color: var(--color-foreground);
+  background-color: var(--color-background);
+  line-height: 1.5;
+}
+
+/* Container utility */
+.container-main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 var(--spacing-md);
+}
+
+/* Text utilities */
+.text-primary {
+  color: var(--color-text-primary);
+}
+
+.text-secondary {
+  color: var(--color-text-secondary);
+}
+
+.text-muted {
+  color: var(--color-muted);
+}
+
+/* Background utilities */
+.bg-primary {
+  background-color: var(--color-primary);
+}
+
+.bg-secondary {
+  background-color: var(--color-secondary);
+}
+
+.bg-accent {
+  background-color: var(--color-accent);
+}
+
+/* Border utilities */
+.border-light {
+  border-color: var(--color-border-light);
+}
+
+.border-default {
+  border-color: var(--color-border);
+}

@@ -1,0 +1,38 @@
+name: Documentation issue
+description: Report incorrect, missing, or confusing documentation.
+title: "[Docs] "
+labels:
+  - documentation
+body:
+  - type: dropdown
+    id: doc_area
+    attributes:
+      label: Document area
+      options:
+        - README
+        - CLAUDE.md
+        - AGENTS.md
+        - .claude references / templates
+        - Carrier support matrix
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current content
+      description: What content is confusing, outdated, or incorrect?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested fix
+      description: What would make this clearer?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add screenshots, links, or reproduction context if helpful.

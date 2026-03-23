@@ -1,0 +1,47 @@
+/**
+ * @description Utility functions for {{TENANT_ID}} tenant app.
+ *              Class name merging and other helpers.
+ */
+import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+/**
+ * Merges Tailwind CSS classes intelligently, handling conflicts.
+ * Combines clsx for conditional classes and twMerge for Tailwind conflict resolution.
+ *
+ * @param inputs - Class values to merge
+ * @returns Merged class string
+ *
+ * @example
+ * const buttonClass = cn(
+ *   'px-4 py-2 rounded bg-blue-500',
+ *   isActive && 'bg-blue-700',
+ *   disabled && 'opacity-50'
+ * );
+ */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+/**
+ * Formats a price value with currency using locale-aware formatting.
+ *
+ * @param amount - The numeric amount to format
+ * @param currency - ISO 4217 currency code (e.g., 'KRW', 'USD')
+ * @returns Formatted price string
+ *
+ * @example
+ * formatPrice(150000, 'KRW') // '₩150,000'
+ * formatPrice(1500.50, 'USD') // '$1,500.50'
+ */
+export function formatPrice(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: currency === 'KRW' || currency === 'JPY' ? 0 : 2,
+    }).format(amount);
+  } catch {
+    return `${amount.toLocaleString()} ${currency}`;
+  }
+}

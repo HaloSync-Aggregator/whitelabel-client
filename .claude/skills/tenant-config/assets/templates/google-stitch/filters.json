@@ -1,0 +1,92 @@
+{
+  "layout": {
+    "style": "horizontal-scroll",
+    "position": "top",
+    "sticky": true,
+    "padding": "16px"
+  },
+  "filterButton": {
+    "style": "primary-pill",
+    "icon": "tune",
+    "label": "Filters",
+    "backgroundColor": "#0066FF",
+    "textColor": "#FFFFFF"
+  },
+  "categories": [
+    {
+      "id": "price",
+      "label": "Price",
+      "type": "dropdown",
+      "style": "pill-outline",
+      "icon": "expand_more",
+      "options": [
+        { "value": "any", "label": "Any price" },
+        { "value": "under500", "label": "Under $500" },
+        { "value": "500to1000", "label": "$500 - $1,000" },
+        { "value": "over1000", "label": "Over $1,000" }
+      ]
+    },
+    {
+      "id": "stops",
+      "label": "Stops",
+      "type": "dropdown",
+      "style": "pill-outline",
+      "icon": "expand_more",
+      "options": [
+        { "value": "any", "label": "Any stops" },
+        { "value": "direct", "label": "Direct only" },
+        { "value": "1stop", "label": "1 stop or less" },
+        { "value": "2stop", "label": "2 stops or less" }
+      ]
+    },
+    {
+      "id": "airlines",
+      "label": "Airlines",
+      "type": "dropdown",
+      "style": "pill-outline",
+      "icon": "expand_more",
+      "options": []
+    },
+    {
+      "id": "times",
+      "label": "Times",
+      "type": "dropdown",
+      "style": "pill-outline",
+      "icon": "expand_more",
+      "options": [
+        { "value": "any", "label": "Any time" },
+        { "value": "morning", "label": "Morning (6am-12pm)" },
+        { "value": "afternoon", "label": "Afternoon (12pm-6pm)" },
+        { "value": "evening", "label": "Evening (6pm-12am)" }
+      ]
+    },
+    {
+      "id": "bags",
+      "label": "Bags",
+      "type": "dropdown",
+      "style": "pill-outline",
+      "icon": "expand_more",
+      "options": [
+        { "value": "any", "label": "Any bags" },
+        { "value": "carry-on", "label": "Carry-on included" },
+        { "value": "checked", "label": "Checked bag included" }
+      ]
+    }
+  ],
+  "pillStyle": {
+    "height": "36px",
+    "borderRadius": "full",
+    "fontSize": "14px",
+    "fontWeight": "medium",
+    "default": {
+      "background": "#FFFFFF",
+      "border": "#E5E7EB",
+      "text": "#0F172A"
+    },
+    "active": {
+      "background": "#0066FF",
+      "border": "transparent",
+      "text": "#FFFFFF"
+    }
+  }
+}

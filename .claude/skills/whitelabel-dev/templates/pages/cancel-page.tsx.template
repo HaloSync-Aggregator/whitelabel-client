@@ -1,0 +1,492 @@
+/**
+ * @template cancel-page
+ * @version 4.1.0
+ * @description Cancel/Refund page template (Vite + React Router)
+ *
+ * Navigation: react-router-dom useParams, useNavigate, useSearchParams
+ * Service: polarhub-service (getBookingDetail, cancelBooking, getRefundQuote)
+ * No 'use client' directive (Vite SPA)
+ */
+
+/**
+ * @page Cancel/Refund Page
+ * @description Cancellation/Refund Page
+ *
+ * 3 Scenarios:
+ * 1. Cancel (Before ticketing): Unpaid hold status -> direct cancellation
+ * 2. VOID (Same day as ticketing): Same-day ticketing -> OrderReshop -> OrderCancel
+ * 3. REFUND (After ticketing): Standard refund -> OrderReshop -> OrderCancel
+ *
+ * Carrier-specific behavior:
+ * - TR (Scoot): Refund not available after payment
+ * - KE, HA: Cancellation/Refund not supported
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import { CancelConfirmPopup, RefundQuotePopup, CancelResultCard } from '@/components/cancel';
+import {
+  OrderStatus,
+  getCancelRefundButtonState,
+  checkVoidAvailable,
+  NON_REFUNDABLE_CARRIERS_AFTER_PAYMENT,
+} from '@/types/cancel';
+import { BookingDetail } from '@/types/booking';
+import { getBookingDetail, cancelBooking, getRefundQuote, ApiError } from '@/lib/api/polarhub-service';
+import { ERROR_MESSAGES } from '@/lib/error-messages';
+
+// Unsupported carriers list
+const UNSUPPORTED_CARRIERS = ['KE', 'HA'];
+
+interface RefundQuote {
+ originalFare: number;
+ penalty: number;
+ refundAmount: number;
+ currency: string;
+ responseId: string;
+ breakdown?: Array<{
+ orderItemId: string;
+ originalAmount: number;
+ penaltyAmount: number;
+ refundAmount: number;
+ currency: string;
+ }>;
+}
+
+interface CancelResult {
+ success: boolean;
+ orderId: string;
+ pnr?: string;
+ status: 'CANCELLED' | 'VOIDED' | 'REFUNDED';
+ statusLabel: string;
+ actionDate: string;
+ message: string;
+ refundAmount?: number;
+ currency?: string;
+}
+
+export default function CancelPage() {
+ const { id: orderId } = useParams<{ id: string }>();
+ const navigate = useNavigate();
+ const [searchParams] = useSearchParams();
+ const owner = searchParams.get('owner') || '';
+
+ // State
+ const [booking, setBooking] = useState<BookingDetail | null>(null);
+ const [orderStatus, setOrderStatus] = useState<OrderStatus | null>(null);
+ const [isLoading, setIsLoading] = useState(true);
+ const [error, setError] = useState<string | null>(null);
+
+ // Popup states
+ const [showCancelPopup, setShowCancelPopup] = useState(false);
+ const [showRefundPopup, setShowRefundPopup] = useState(false);
+ const [refundQuote, setRefundQuote] = useState<RefundQuote | null>(null);
+ const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+
+ // Result state
+ const [cancelResult, setCancelResult] = useState<CancelResult | null>(null);
+
+ // ============================================================
+ // Booking Information Retrieval
+ // ============================================================
+ const fetchBooking = useCallback(async () => {
+ try {
+ setIsLoading(true);
+ setError(null);
+
+ // Verify owner parameter
+ if (!owner) {
+ throw new Error(ERROR_MESSAGES.CARRIER_INFO_REQUIRED);
+ }
+
+ if (!orderId) {
+ throw new Error(ERROR_MESSAGES.BOOKING_NUMBER_MISSING);
+ }
+
+ const bookingData = await getBookingDetail(orderId);
+
+ if (!bookingData.orderId) {
+ throw new Error(ERROR_MESSAGES.BOOKING_NOT_AVAILABLE);
+ }
+
+ setBooking(bookingData);
+
+ // Determine order status from BookingDetail (isTicketed, actions)
+ const status: OrderStatus = {
+ isTicketed: bookingData.isTicketed,
+ isPaid: bookingData.isPaid || (!bookingData.isTicketed && !bookingData.actions.canCancel),
+ isHeld: !bookingData.isTicketed && bookingData.actions.canCancel,
+ canCancel: bookingData.actions.canCancel,
+ canVoidRefund: bookingData.actions.canVoidRefund,
+ carrierCode: bookingData.carrierCode,
+ };
+ setOrderStatus(status);
+
+ } catch (err) {
+ setError(err instanceof Error ? err.message : ERROR_MESSAGES.GENERIC_ERROR);
+ } finally {
+ setIsLoading(false);
+ }
+ }, [orderId, owner]);
+
+ useEffect(() => {
+ if (orderId) {
+ fetchBooking();
+ }
+ }, [orderId, fetchBooking]);
+
+ // ============================================================
+ // Cancellation Process (Before ticketing)
+ // ============================================================
+ const handleCancel = async () => {
+ if (!booking) return;
+
+ const data = await cancelBooking({
+ transactionId: booking._orderData.transactionId,
+ orderId: booking.orderId,
+ cancelType: 'CANCEL',
+ });
+
+ setCancelResult({
+ success: true,
+ orderId: booking.orderId,
+ pnr: booking.pnr,
+ status: 'CANCELLED',
+ statusLabel: 'Cancellation Complete',
+ actionDate: data.actionDate || new Date().toISOString(),
+ message: 'Booking has been cancelled.',
+ });
+
+ setShowCancelPopup(false);
+ };
+
+ // ============================================================
+ // Refund Quote/Estimate Retrieval (After ticketing)
+ // ============================================================
+ const handleFetchRefundQuote = async () => {
+ if (!booking) return;
+
+ try {
+ setIsLoadingQuote(true);
+ setShowRefundPopup(true);
+
+ const data = await getRefundQuote({
+ transactionId: booking._orderData.transactionId,
+ orderId: booking.orderId,
+ });
+
+ setRefundQuote(data.refundQuote);
+ } catch (err) {
+ const message = err instanceof ApiError ? err.message : ERROR_MESSAGES.REFUND_QUOTE_FAILED;
+ setError(message);
+ setShowRefundPopup(false);
+ } finally {
+ setIsLoadingQuote(false);
+ }
+ };
+
+ // ============================================================
+ // Refund Process (VOID/REFUND)
+ // ============================================================
+ const handleRefund = async () => {
+ if (!booking) return;
+
+ const ticketedDate = booking.tickets?.[0]?.issuedDate;
+ const isVoid = ticketedDate ? checkVoidAvailable(ticketedDate) : false;
+
+ const data = await cancelBooking({
+ transactionId: booking._orderData.transactionId,
+ orderId: booking.orderId,
+ cancelType: isVoid ? 'VOID' : 'REFUND',
+ });
+
+ setCancelResult({
+ success: true,
+ orderId: booking.orderId,
+ pnr: booking.pnr,
+ status: isVoid ? 'VOIDED' : 'REFUNDED',
+ statusLabel: isVoid ? 'VOID Complete' : 'Refund Complete',
+ actionDate: data.actionDate || new Date().toISOString(),
+ message: isVoid
+ ? 'Ticket has been voided.'
+ : 'Refund has been processed.',
+ refundAmount: refundQuote?.refundAmount,
+ currency: refundQuote?.currency,
+ });
+
+ setShowRefundPopup(false);
+ };
+
+ // ============================================================
+ // Button click Handler
+ // ============================================================
+ const handleCancelClick = () => {
+ if (orderStatus?.canCancel) {
+ setShowCancelPopup(true);
+ }
+ };
+
+ const handleVoidRefundClick = () => {
+ if (orderStatus?.canVoidRefund) {
+ handleFetchRefundQuote();
+ }
+ };
+
+ // ============================================================
+ // Render helpers
+ // ============================================================
+ const buttonState = orderStatus
+ ? getCancelRefundButtonState(
+ orderStatus,
+ booking?.tickets?.[0]?.issuedDate
+ )
+ : null;
+
+ const isUnsupportedCarrier = booking?.carrierCode &&
+ UNSUPPORTED_CARRIERS.includes(booking.carrierCode);
+
+ const isNonRefundableAfterPayment = booking?.carrierCode &&
+ NON_REFUNDABLE_CARRIERS_AFTER_PAYMENT.includes(booking.carrierCode) &&
+ orderStatus?.isPaid &&
+ !orderStatus?.isTicketed;
+
+ // ============================================================
+ // Render
+ // ============================================================
+
+ // Result Screen
+ if (cancelResult) {
+ return (
+ <div className="min-h-screen bg-gray-50">
+ <Header />
+ <main className="max-w-2xl mx-auto px-4 py-12">
+ <CancelResultCard
+ result={cancelResult}
+ onClose={() => navigate(`/booking/${orderId}?owner=${owner}`)}
+ onGoHome={() => navigate('/')}
+ />
+ </main>
+ <Footer />
+ </div>
+ );
+ }
+
+ return (
+ <div className="min-h-screen bg-gray-50">
+ <Header />
+
+ <main className="max-w-4xl mx-auto px-4 py-8">
+ <h1 className="text-2xl font-bold text-gray-900 mb-6">Cancellation/Refund</h1>
+
+ {/* Loading */}
+ {isLoading && (
+ <div className="flex justify-center items-center py-20">
+ <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+ </div>
+ )}
+
+ {/* Error */}
+ {error && (
+ <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+ <p className="text-red-600">{error}</p>
+ <button
+ onClick={fetchBooking}
+ className="mt-2 text-sm text-red-700 underline"
+ >
+ Retry
+ </button>
+ </div>
+ )}
+
+ {/* Content */}
+ {booking && !isLoading && (
+ <div className="space-y-6">
+ {/* Booking Information Summary */}
+ <div className="bg-white rounded-lg shadow p-6">
+ <h2 className="text-lg font-semibold text-gray-900 mb-4">Booking Information</h2>
+
+ <div className="grid grid-cols-2 gap-4">
+ <div>
+ <span className="text-sm text-gray-500">Booking Number (PNR)</span>
+ <p className="font-medium text-gray-900">{booking.pnr}</p>
+ </div>
+ <div>
+ <span className="text-sm text-gray-500">Carrier</span>
+ <p className="font-medium text-gray-900">{booking.carrierName}</p>
+ </div>
+ <div>
+ <span className="text-sm text-gray-500">Booking Status</span>
+ <p className="font-medium text-gray-900">{booking.statusLabel}</p>
+ </div>
+ <div>
+ <span className="text-sm text-gray-500">Passenger</span>
+ <p className="font-medium text-gray-900">{booking.passengers.length} passenger(s)</p>
+ </div>
+ </div>
+
+ {/* Journey information */}
+ <div className="mt-4 pt-4 border-t border-gray-200">
+ <span className="text-sm text-gray-500">Itinerary</span>
+ {booking.itineraries.map((itinerary, idx) => (
+ <div key={idx} className="mt-2">
+ {itinerary.segments.map((seg, segIdx) => (
+ <p key={segIdx} className="font-medium text-gray-900">
+ {seg.departure.airport} → {seg.arrival.airport}
+ <span className="text-sm text-gray-500 ml-2">
+ {seg.departure.date} {seg.departure.time}
+ </span>
+ </p>
+ ))}
+ </div>
+ ))}
+ </div>
+ </div>
+
+ {/* Fare information */}
+ <div className="bg-white rounded-lg shadow p-6">
+ <h2 className="text-lg font-semibold text-gray-900 mb-4">Fare information</h2>
+ <div className="flex justify-between items-center">
+ <span className="text-gray-600">Total payment amount</span>
+ <span className="text-xl font-bold text-gray-900">
+ {booking.price.formattedTotal}
+ </span>
+ </div>
+ </div>
+
+ {/* Unsupported carrier notice */}
+ {isUnsupportedCarrier && (
+ <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+ <div className="flex items-center gap-2">
+ <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+ </svg>
+ <p className="text-amber-700 font-medium">
+ {booking.carrierCode} carrier does not support online cancellation/refund.
+ </p>
+ </div>
+ <p className="mt-2 text-sm text-amber-600">
+ Please contact the carrier or ticketing office directly.
+ </p>
+ </div>
+ )}
+
+ {/* TR carrier: refund not available after payment */}
+ {isNonRefundableAfterPayment && (
+ <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+ <div className="flex items-center gap-2">
+ <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+ <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+ </svg>
+ <p className="text-red-700 font-medium">
+ {booking.carrierCode} Refund is not available after payment for this carrier.
+ </p>
+ </div>
+ </div>
+ )}
+
+ {/* Action Button */}
+ {!isUnsupportedCarrier && buttonState && (
+ <div className="bg-white rounded-lg shadow p-6">
+ <h2 className="text-lg font-semibold text-gray-900 mb-4">Cancellation/Refund Request</h2>
+
+ {/* Status-specific guide message */}
+ {orderStatus?.isHeld && (
+ <p className="text-gray-600 mb-4">
+ This booking has not been paid yet. No cancellation fee will be charged.
+ </p>
+ )}
+
+ {orderStatus?.isTicketed && (
+ <p className="text-gray-600 mb-4">
+ This is a ticketed booking. Cancellation fees may apply.
+ </p>
+ )}
+
+ <div className="flex gap-4">
+ {/* Go Back Button */}
+ <button
+ onClick={() => navigate(`/booking/${orderId}?owner=${owner}`)}
+ className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50"
+ >
+ Go Back
+ </button>
+
+ {/* Cancel Button (unpaid hold) */}
+ {buttonState.showCancelButton && (
+ <button
+ onClick={handleCancelClick}
+ disabled={!buttonState.isEnabled}
+ className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+ >
+ {buttonState.buttonLabel}
+ </button>
+ )}
+
+ {/* VOID/REFUND Button (After ticketing) */}
+ {buttonState.showVoidRefundButton && (
+ <button
+ onClick={handleVoidRefundClick}
+ disabled={!buttonState.isEnabled}
+ className="flex-1 px-4 py-3 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+ >
+ {buttonState.buttonLabel}
+ </button>
+ )}
+
+ {/* Inactive status */}
+ {!buttonState.showCancelButton && !buttonState.showVoidRefundButton && (
+ <div className="flex-1 px-4 py-3 bg-gray-100 text-gray-500 rounded-lg text-center">
+ {buttonState.disabledReason || 'Cancellation/Refund not available'}
+ </div>
+ )}
+ </div>
+ </div>
+ )}
+ </div>
+ )}
+ </main>
+
+ <Footer />
+
+ {/* Cancel Confirm Popup */}
+ {booking && (
+ <CancelConfirmPopup
+ isOpen={showCancelPopup}
+ onClose={() => setShowCancelPopup(false)}
+ onConfirm={handleCancel}
+ orderInfo={{
+ orderId: booking.orderId,
+ pnr: booking.pnr,
+ carrierCode: booking.carrierCode,
+ carrierName: booking.carrierName,
+ passengerCount: booking.passengers.length,
+ }}
+ />
+ )}
+
+ {/* Refund Quote Popup */}
+ {booking && (
+ <RefundQuotePopup
+ isOpen={showRefundPopup}
+ onClose={() => {
+ setShowRefundPopup(false);
+ setRefundQuote(null);
+ }}
+ onConfirm={handleRefund}
+ refundQuote={refundQuote}
+ orderInfo={{
+ orderId: booking.orderId,
+ pnr: booking.pnr,
+ carrierCode: booking.carrierCode,
+ isVoidAvailable: booking.tickets?.[0]?.issuedDate
+ ? checkVoidAvailable(booking.tickets[0].issuedDate)
+ : false,
+ }}
+ isLoading={isLoadingQuote}
+ />
+ )}
+ </div>
+ );
+}

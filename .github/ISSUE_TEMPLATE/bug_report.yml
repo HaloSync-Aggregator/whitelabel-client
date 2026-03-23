@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a reproducible bug in the public seed, sample app, or setup flow.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report.
+
+        Please do not include API keys, secrets, personal data, or security-sensitive details here.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where did you hit the problem?
+      options:
+        - README / setup
+        - .claude agents / skills / templates
+        - DEMO001 sample app
+        - Carrier support / docs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the problem.
+      placeholder: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps needed to reproduce the issue.
+      placeholder: |
+        1. Clone the repository
+        2. Configure .env
+        3. Run npm run dev
+        4. Open ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Add browser, OS, Node version, and anything else relevant.
+      placeholder: macOS 15, Node 20, Chrome 135
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste safe logs or screenshots. Do not include secrets.

@@ -1,0 +1,47 @@
+# Sample Tenant Configuration
+# Copy this file and modify for your tenant: tenant/{tenant_id}.yaml
+
+tenant_id: DEMO001
+
+brand:
+ name: "SkyDemo Travel Agency"
+ logo_url: "/images/logo-placeholder.svg"
+ primary_color: "#1a73e8"
+ secondary_color: "#ea4335"
+
+domains:
+ - localhost:5173
+
+features:
+ seats: true
+ bags: true
+ reshop: true
+ cancel: true
+
+footer:
+ links:
+  - section: "Service"
+    items:
+     - label: "Flight Search"
+       href: "/"
+  - section: "Company"
+    items:
+     - label: "About Us"
+       href: "#"
+       external: true
+     - label: "Terms of Service"
+       href: "#"
+       external: true
+     - label: "Privacy Policy"
+       href: "#"
+       external: true
+ company:
+  name: "SkyDemo Travel Agency"
+  description: "SkyDemo Travel Agency - Convenient Flight Booking Service"
+
+polarhub:
+ base_url: "http://localhost:3000"
+ airlines:
+  - "AF"
+  - "KL"
+  - "QR"

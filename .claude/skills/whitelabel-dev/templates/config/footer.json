@@ -1,0 +1,38 @@
+{
+  "style": "minimal",
+  "background": "#F8F9FA",
+  "padding": "24px 16px",
+  "sections": {
+    "brand": {
+      "logo": {
+        "src": "/images/logo-placeholder.svg",
+        "height": 24
+      },
+ "description": "SkyDemo Travel Agency - 편리한 Air ticket Booking Service"
+    },
+    "links": {
+      "columns": [
+        {
+          "title": "Service",
+          "items": [
+            { "label": "Air ticket Search", "href": "/" },
+ { "label": "내 Booking", "href": "/bookings" },
+ { "label": "고객센터", "href": "/support" }
+          ]
+        },
+        {
+ "title": "회사",
+          "items": [
+ { "label": "회사 소items", "href": "/about" },
+ { "label": "이용약관", "href": "/terms" },
+ { "label": "items인InformationProcess방침", "href": "/privacy" }
+          ]
+        }
+      ]
+    },
+    "copyright": {
+      "text": "2025 SkyDemo Travel Agency. All rights reserved.",
+      "showYear": true
+    }
+  }
+}

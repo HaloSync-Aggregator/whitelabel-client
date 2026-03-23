@@ -1,0 +1,74 @@
+{
+  "layout": {
+    "width": "260px",
+    "position": "left",
+    "sticky": true
+  },
+  "categories": [
+    {
+      "id": "stops",
+      "label": "Stopover",
+      "type": "checkbox",
+      "expanded": true,
+      "options": [
+        { "value": "direct", "label": "Non-stop" },
+ { "value": "1stop", "label": "Stopover 1 time(s)" },
+ { "value": "2stop", "label": "Stopover 2 time(s) Or more" }
+      ]
+    },
+    {
+      "id": "baggage",
+      "label": "Baggage",
+      "type": "checkbox",
+      "expanded": true,
+      "options": [
+        { "value": "included", "label": "Baggage Include" },
+ { "value": "notIncluded", "label": "Baggage Not/Un-Include" }
+      ]
+    },
+    {
+      "id": "airlines",
+      "label": "Carrier",
+      "type": "checkbox",
+      "expanded": true,
+      "showMinPrice": true,
+      "options": []
+    },
+    {
+      "id": "cabinClass",
+      "label": "Seat Class",
+      "type": "checkbox",
+      "expanded": false,
+      "options": [
+        { "value": "economy", "label": "Economy class" },
+ { "value": "premiumEconomy", "label": "프리Not/Un-엄Economy class" },
+        { "value": "business", "label": "Business class" },
+        { "value": "first", "label": "First class" }
+      ]
+    },
+    {
+      "id": "departureTime",
+      "label": "Departure Time",
+      "type": "checkbox",
+      "expanded": false,
+      "options": [
+ { "value": "dawn", "label": "Dawn (00:00~06:00)" },
+ { "value": "morning", "label": "오전 (06:00~12:00)" },
+ { "value": "afternoon", "label": "Afternoon (12:00~18:00)" },
+ { "value": "evening", "label": "Evening (18:00~24:00)" }
+      ]
+    },
+    {
+      "id": "arrivalTime",
+      "label": "Arrival Time",
+      "type": "checkbox",
+      "expanded": false,
+      "options": [
+ { "value": "dawn", "label": "Dawn (00:00~06:00)" },
+ { "value": "morning", "label": "오전 (06:00~12:00)" },
+ { "value": "afternoon", "label": "Afternoon (12:00~18:00)" },
+ { "value": "evening", "label": "Evening (18:00~24:00)" }
+      ]
+    }
+  ]
+}

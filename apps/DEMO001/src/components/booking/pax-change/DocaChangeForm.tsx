@@ -1,0 +1,289 @@
+
+import React, { useState } from 'react';
+import { cn } from '@/lib/utils';
+import { VALIDATION_PATTERNS } from '@/types/pax-change';
+import type { PaxActionType } from '@/types/booking';
+
+interface DocaInfo {
+  street?: string;
+  cityName?: string;
+  postalCode?: string;
+  countryCode?: string;
+}
+
+interface DocaChangeFormProps {
+  currentDoca?: DocaInfo;
+  action?: PaxActionType; // from Parent Select Task
+  onSubmit: (data: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}
+
+const COMMON_COUNTRIES = [
+  { code: 'KR', label: 'South Korea (KR)' },
+  { code: 'US', label: 'United States (US)' },
+  { code: 'JP', label: 'Japan (JP)' },
+  { code: 'CN', label: 'China (CN)' },
+  { code: 'SG', label: 'Singapore (SG)' },
+  { code: 'GB', label: 'United Kingdom (GB)' },
+  { code: 'DE', label: 'Germany (DE)' },
+  { code: 'FR', label: 'France (FR)' },
+  { code: 'AU', label: 'Australia (AU)' },
+  { code: 'CA', label: 'Canada (CA)' },
+  { code: 'TH', label: 'Thailand (TH)' },
+  { code: 'VN', label: 'Vietnam (VN)' },
+  { code: 'PH', label: 'Philippines (PH)' },
+];
+
+export default function DocaChangeForm({
+  currentDoca,
+  action = 'MODIFY',
+  onSubmit,
+  onCancel,
+  isSubmitting,
+}: DocaChangeFormProps) {
+  const [street, setStreet] = useState(currentDoca?.street || '');
+  const [cityName, setCityName] = useState(currentDoca?.cityName || '');
+  const [postalCode, setPostalCode] = useState(currentDoca?.postalCode || '');
+  const [countryCode, setCountryCode] = useState(currentDoca?.countryCode || 'KR');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const hasExistingDoca = !!(currentDoca?.street || currentDoca?.cityName);
+
+  const validate = (): boolean => {
+    // DELETE Task Verify not required
+    if (action === 'DELETE') {
+      return true;
+    }
+
+    const newErrors: Record<string, string> = {};
+
+    if (!street.trim()) {
+      newErrors.street = 'Please enter the street address.';
+    }
+
+    if (!cityName.trim()) {
+      newErrors.cityName = 'Please enter the city name.';
+    }
+
+    if (!postalCode.trim()) {
+      newErrors.postalCode = 'Please enter the postal code.';
+    }
+
+    if (countryCode && !VALIDATION_PATTERNS.COUNTRY_CODE.test(countryCode)) {
+      newErrors.countryCode = 'Country code must be 2 uppercase letters.';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    if (action === 'DELETE') {
+      await onSubmit({});
+    } else {
+      await onSubmit({
+        street: street.trim(),
+        cityName: cityName.trim(),
+        postalCode: postalCode.trim(),
+        countryCode,
+      });
+    }
+  };
+
+  // DELETE Mode
+  if (action === 'DELETE') {
+    return (
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
+          <strong>NOTE:</strong> Existing address of stay information will be deleted.
+        </div>
+
+        {hasExistingDoca && (
+          <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+            <p className="text-sm text-muted">Address of stay information to be deleted</p>
+            <p className="text-sm">Address: {currentDoca?.street}</p>
+            <p className="text-sm">City: {currentDoca?.cityName}</p>
+            <p className="text-sm">Postal Code: {currentDoca?.postalCode}</p>
+            <p className="text-sm">Country: {currentDoca?.countryCode}</p>
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-2 w-full overflow-hidden">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 min-w-0 py-2 px-4 border border-border rounded-lg text-foreground hover:bg-muted/50 transition-colors"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="flex-1 min-w-0 py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Deleting...' : 'Delete Address'}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  // ADD / MODIFY Mode
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+        <strong>Guide:</strong> Please enter your address of stay at the destination.
+        Some countries require address of stay information (DOCA) upon entry.
+      </div>
+
+      {/* Current address of stay info (when MODIFY) */}
+      {action === 'MODIFY' && hasExistingDoca && (
+        <div className="bg-muted/50 rounded-lg p-3">
+          <p className="text-sm text-muted mb-1">Current registered address</p>
+          <p className="text-sm font-medium">
+            {currentDoca?.street}, {currentDoca?.cityName} {currentDoca?.postalCode}
+          </p>
+        </div>
+      )}
+
+      {/* Country Select */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Country <span className="text-red-500">*</span>
+        </label>
+        <select
+          value={countryCode}
+          onChange={(e) => setCountryCode(e.target.value)}
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.countryCode ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+        >
+          {COMMON_COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        {errors.countryCode && (
+          <p className="mt-1 text-sm text-red-500">{errors.countryCode}</p>
+        )}
+      </div>
+
+      {/* City Name */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          City Name <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={cityName}
+          onChange={(e) => {
+            setCityName(e.target.value);
+            if (errors.cityName) {
+              setErrors(prev => ({ ...prev, cityName: '' }));
+            }
+          }}
+          placeholder="e.g.: Seoul, New York, Tokyo"
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.cityName ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+          maxLength={50}
+        />
+        {errors.cityName && (
+          <p className="mt-1 text-sm text-red-500">{errors.cityName}</p>
+        )}
+      </div>
+
+      {/* Street Address */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Street Address <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={street}
+          onChange={(e) => {
+            setStreet(e.target.value);
+            if (errors.street) {
+              setErrors(prev => ({ ...prev, street: '' }));
+            }
+          }}
+          placeholder="e.g.: 123 Main Street, Apt 456"
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.street ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+          maxLength={100}
+        />
+        {errors.street && (
+          <p className="mt-1 text-sm text-red-500">{errors.street}</p>
+        )}
+      </div>
+
+      {/* Postal Code */}
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">
+          Postal Code <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          value={postalCode}
+          onChange={(e) => {
+            setPostalCode(e.target.value);
+            if (errors.postalCode) {
+              setErrors(prev => ({ ...prev, postalCode: '' }));
+            }
+          }}
+          placeholder="e.g.: 12345"
+          className={cn(
+            'w-full px-3 py-2 border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary',
+            errors.postalCode ? 'border-red-500' : 'border-border'
+          )}
+          disabled={isSubmitting}
+          maxLength={20}
+        />
+        {errors.postalCode && (
+          <p className="mt-1 text-sm text-red-500">{errors.postalCode}</p>
+        )}
+      </div>
+
+      {/* Preview */}
+      <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+        <p className="text-sm text-muted">{action === 'ADD' ? 'Address to be added' : 'Address after change'}</p>
+        <p className="text-sm">Address: {street || '-'}</p>
+        <p className="text-sm">City: {cityName || '-'}</p>
+        <p className="text-sm">Postal Code: {postalCode || '-'}</p>
+        <p className="text-sm">Country: {countryCode}</p>
+      </div>
+
+      {/* Buttons */}
+      <div className="flex gap-3 pt-2 w-full overflow-hidden">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 min-w-0 py-2 px-4 border border-border rounded-lg text-foreground hover:bg-muted/50 transition-colors"
+          disabled={isSubmitting}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="flex-1 min-w-0 py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Processing...' : action === 'ADD' ? 'Add Address' : 'Update Address'}
+        </button>
+      </div>
+    </form>
+  );
+}

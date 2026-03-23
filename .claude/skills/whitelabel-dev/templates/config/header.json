@@ -1,0 +1,72 @@
+{
+  "structure": "1row",
+  "style": "mobile-first",
+  "rows": [
+    {
+      "id": "main",
+      "height": 56,
+      "background": "rgba(255, 255, 255, 0.95)",
+      "backdropBlur": true,
+      "borderBottom": true,
+      "items": ["brand", "actions"]
+    }
+  ],
+  "brand": {
+    "type": "logo-text",
+    "logo": {
+      "src": "/images/logo-placeholder.svg",
+      "height": 32,
+      "fallback": "HS"
+    },
+    "text": {
+      "name": "SkyDemo",
+      "subtitle": "Travel Agency",
+      "subtitleStyle": {
+        "dot": false,
+        "uppercase": false,
+        "letterSpacing": "normal"
+      }
+    }
+  },
+  "actions": {
+    "position": "right",
+    "items": [
+      {
+        "type": "icon-button",
+        "icon": "notifications",
+        "style": "ghost"
+      },
+      {
+        "type": "icon-button",
+        "icon": "account_circle",
+        "style": "ghost"
+      }
+    ]
+  },
+  "bottomNavigation": {
+    "enabled": true,
+    "style": "floating",
+    "background": "rgba(255, 255, 255, 0.95)",
+    "backdropBlur": true,
+    "items": [
+      { "icon": "home", "label": "Home", "href": "/", "active": true, "filled": true },
+      { "icon": "airplane_ticket", "label": "Bookings", "href": "/bookings" },
+      { "icon": "search", "label": "Search", "href": "/search", "style": "fab", "highlight": true },
+      { "icon": "explore", "label": "Explore", "href": "/explore" },
+      { "icon": "person", "label": "Profile", "href": "/profile" }
+    ]
+  },
+  "resultsHeader": {
+    "enabled": true,
+    "style": "compact",
+    "backButton": true,
+    "title": {
+ "primary": "{count}items's Flight",
+      "secondary": "{origin} → {destination} • {dates}"
+    },
+    "editButton": {
+      "icon": "edit",
+      "style": "ghost"
+    }
+  }
+}

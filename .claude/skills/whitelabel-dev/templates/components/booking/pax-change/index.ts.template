@@ -1,0 +1,10 @@
+// @template index
+// @version 4.0.0 (synced from template)
+// @description Template for booking/pax-change/index.ts
+
+export { default as NameChangeForm } from './NameChangeForm';
+export { default as ContactChangeForm } from './ContactChangeForm';
+export { default as ContactAddDeleteForm } from './ContactAddDeleteForm';
+export { default as ApisChangeForm } from './ApisChangeForm';
+export { default as FfnChangeForm } from './FfnChangeForm';
+export { default as DocaChangeForm } from './DocaChangeForm';

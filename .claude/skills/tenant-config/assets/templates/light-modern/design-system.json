@@ -1,0 +1,57 @@
+{
+  "colors": {
+    "primary": "#6366F1",
+    "secondary": "#8B5CF6",
+    "accent": "#EC4899",
+    "text": {
+      "primary": "#1F2937",
+      "secondary": "#6B7280",
+      "tertiary": "#9CA3AF"
+    },
+    "background": {
+      "primary": "#FFFFFF",
+      "secondary": "#F9FAFB",
+      "tertiary": "#F3F4F6"
+    },
+    "border": {
+      "light": "#E5E7EB",
+      "dark": "#D1D5DB"
+    },
+    "status": {
+      "info": "#3B82F6",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444"
+    }
+  },
+  "typography": {
+    "fontFamily": "Pretendard, -apple-system, BlinkMacSystemFont, sans-serif",
+    "fontSize": {
+      "xs": "12px",
+      "sm": "14px",
+      "base": "16px",
+      "lg": "18px",
+      "xl": "20px",
+      "2xl": "24px"
+    },
+    "fontWeight": {
+      "normal": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    }
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px",
+    "xl": "32px"
+  },
+  "borderRadius": {
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "full": "9999px"
+  }
+}

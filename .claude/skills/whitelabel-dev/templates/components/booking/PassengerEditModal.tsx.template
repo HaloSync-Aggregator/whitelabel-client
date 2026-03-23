@@ -1,0 +1,465 @@
+// @template PassengerEditModal
+// @version 4.0.0 (synced from template)
+// @description Template for booking/PassengerEditModal.tsx
+
+import { useState, useEffect, useCallback } from 'react';
+import { cn } from '@/lib/utils';
+import type { PassengerInfo, AllowedPaxChanges, PaxActionType } from '@/types/booking';
+import type { PaxChangeType } from '@/types/pax-change';
+import {
+  NameChangeForm,
+  ContactChangeForm,
+  ContactAddDeleteForm,
+  ApisChangeForm,
+  FfnChangeForm,
+  DocaChangeForm,
+} from './pax-change';
+import { changePax, ApiError } from '@/lib/api/polarhub-service';
+import { ERROR_MESSAGES } from '@/lib/error-messages';
+
+interface PassengerEditModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  orderId: string;
+  carrierCode: string;
+  passengers: PassengerInfo[];
+  allowedChanges: AllowedPaxChanges;
+  departureDate?: string;
+  onSuccess: () => void;
+  // ⚠️ CRITICAL: transactionId from OrderRetrieve response required!
+  transactionId: string;
+}
+
+interface ChangeTypeOption {
+  type: PaxChangeType;
+  label: string;
+  description: string;
+  enabled: boolean;
+}
+
+const ACTION_LABELS: Record<PaxActionType, { label: string; description: string }> = {
+  ADD: { label: 'Add', description: 'Add new information' },
+  DELETE: { label: 'Delete', description: 'Delete existing information' },
+  MODIFY: { label: 'Modify', description: 'Modify existing information' },
+};
+
+export default function PassengerEditModal({
+  isOpen,
+  onClose,
+  orderId,
+  carrierCode,
+  passengers,
+  allowedChanges,
+  departureDate,
+  onSuccess,
+  transactionId,
+}: PassengerEditModalProps) {
+  const [selectedPaxId, setSelectedPaxId] = useState<string | null>(null);
+  const [selectedChangeType, setSelectedChangeType] = useState<PaxChangeType | null>(null);
+  const [selectedAction, setSelectedAction] = useState<PaxActionType | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Auto-select first passenger when modal opens
+  useEffect(() => {
+    if (isOpen && passengers.length > 0 && !selectedPaxId) {
+      setSelectedPaxId(passengers[0].paxId);
+    }
+  }, [isOpen, passengers, selectedPaxId]);
+
+  // Configure default action based on mode
+  useEffect(() => {
+    if (selectedChangeType && allowedChanges.allowedActions.length > 0) {
+      // Auto-select MODIFY in MODIFY_ONLY mode
+      if (allowedChanges.mode === 'MODIFY_ONLY') {
+        setSelectedAction('MODIFY');
+      }
+      // In ALL mode, default to MODIFY if available
+      else if (allowedChanges.mode === 'ALL' && allowedChanges.allowedActions.includes('MODIFY')) {
+        setSelectedAction('MODIFY');
+      }
+      // Selection required for ADD_DELETE_ONLY mode
+      else {
+        setSelectedAction(null);
+      }
+    }
+  }, [selectedChangeType, allowedChanges.mode, allowedChanges.allowedActions]);
+
+  // Select Passenger information
+  const selectedPax = passengers.find(p => p.paxId === selectedPaxId);
+
+  // Change Type Option
+  const changeTypeOptions: ChangeTypeOption[] = [
+    {
+      type: 'NAME',
+      label: 'Passenger information (Name)',
+      description: 'propertyperson, Title/Honorific Change',
+      enabled: allowedChanges.canChangeName,
+    },
+    {
+      type: 'CONTACT',
+      label: 'Contact (Email/Phone)',
+      description: 'Email address, PhoneNumber Change',
+      enabled: allowedChanges.canChangeContact,
+    },
+    {
+      type: 'APIS',
+      label: 'Passport Information',
+      description: 'PassportNumber, -like, Expiry date Change',
+      enabled: allowedChanges.canChangeApis,
+    },
+    {
+      type: 'FFN',
+      label: 'Mileage Information',
+      description: 'Mileage Log, Member Number Change',
+      enabled: allowedChanges.canChangeFfn,
+    },
+    {
+      type: 'DOCA',
+      label: 'Residence Information',
+      description: 'Destination stay address change',
+      enabled: allowedChanges.canChangeDoca ?? false,
+    },
+  ];
+
+  // activationpropertyconversion Change Type only filtering
+  const enabledOptions = changeTypeOptions.filter(opt => opt.enabled);
+
+  // Whether action selection is required
+  const needsActionSelection = allowedChanges.mode !== 'MODIFY_ONLY' && allowedChanges.allowedActions.length > 1;
+
+  // API Call
+  const submitChange = useCallback(async (data: Record<string, unknown>) => {
+    if (!selectedPaxId || !selectedChangeType || !selectedAction || !selectedPax) return;
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const result = await changePax({
+        orderId,
+        // ⚠️ CRITICAL: transactionId from OrderRetrieve response required!
+        transactionId,
+        paxId: selectedPaxId,
+        changeType: selectedChangeType,
+        action: selectedAction,
+        carrierCode,
+        data,
+        // ⚠️ CRITICAL: NDC Spec - Passenger information from OrderViewRS data is required!
+        paxInfo: {
+          property: selectedPax.property,
+          givenName: selectedPax.givenName,
+          birthdate: selectedPax.birthdate,
+          gender: selectedPax.gender,
+          title: selectedPax.title,
+          ptc: selectedPax.ptc as 'ADT' | 'CHD' | 'INF',
+          email: selectedPax.email,
+          mobile: selectedPax.mobile,
+          contactInfoRefIds: selectedPax.contactInfoRefIds,
+          contactDetails: selectedPax.contactDetails,
+          apisInfo: selectedPax.apisInfo,
+          ffn: selectedPax.ffn,
+          docaInfo: selectedPax.docaInfo,
+        },
+      });
+
+      if (!result.success) {
+        setError(result.error || ERROR_MESSAGES.PAX_CHANGE_FAILED);
+        return;
+      }
+
+      // Success
+      onSuccess();
+      onClose();
+    } catch (err) {
+      console.error('Pax change error:', err);
+      const message = err instanceof ApiError ? err.message : ERROR_MESSAGES.PAX_CHANGE_FAILED;
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [orderId, selectedPaxId, selectedChangeType, selectedAction, carrierCode, transactionId, onSuccess, onClose]);
+
+  // Modal Close Handler
+  const handleClose = () => {
+    if (isSubmitting) return;
+    setSelectedChangeType(null);
+    setSelectedAction(null);
+    setError(null);
+    onClose();
+  };
+
+  // Back button Handler
+  const handleBack = () => {
+    if (selectedAction && needsActionSelection) {
+      setSelectedAction(null);
+    } else {
+      setSelectedChangeType(null);
+      setSelectedAction(null);
+    }
+    setError(null);
+  };
+
+  // Check if ready to display form (both Change Type and Action selected)
+  const isReadyForForm = selectedChangeType && selectedAction;
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={handleClose}
+      />
+
+      {/* Modal */}
+      <div className="relative bg-surface border border-border rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            {(selectedChangeType || selectedAction) && (
+              <button
+                onClick={handleBack}
+                className="p-1 hover:bg-muted/50 rounded-lg transition-colors"
+                disabled={isSubmitting}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            <h2 className="text-lg font-bold text-foreground">
+              Passenger information Change
+            </h2>
+          </div>
+          <button
+            onClick={handleClose}
+            className="p-1 hover:bg-muted/50 rounded-lg transition-colors"
+            disabled={isSubmitting}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4">
+          {/* Error message */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+              {error}
+            </div>
+          )}
+
+          {/* Per carrier Task Mode Guide */}
+          {!selectedChangeType && allowedChanges.mode !== 'MODIFY_ONLY' && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+              {allowedChanges.mode === 'ADD_DELETE_ONLY' ? (
+                <><strong>Guide:</strong> Carrier Information Add/Delete only Support.</>
+              ) : (
+                <><strong>Guide:</strong> Carrier Add/Delete/Change All Support.</>
+              )}
+            </div>
+          )}
+
+          {/* Step 1: Passenger + Change Type Select */}
+          {!selectedChangeType && (
+            <>
+              {/* Passenger Select */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Passenger Select
+                </label>
+                <select
+                  value={selectedPaxId || ''}
+                  onChange={(e) => setSelectedPaxId(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {passengers.map((pax) => (
+                    <option key={pax.paxId} value={pax.paxId}>
+                      {pax.fullName} ({pax.ptcLabel})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Change Type Select */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Change Item
+                </label>
+                {enabledOptions.length === 0 ? (
+                  <div className="p-4 bg-muted/50 rounded-lg text-center text-muted">
+                    Current Change Available Item .
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {changeTypeOptions.map((option) => (
+                      <button
+                        key={option.type}
+                        onClick={() => option.enabled && setSelectedChangeType(option.type)}
+                        disabled={!option.enabled}
+                        className={cn(
+                          'w-full p-3 border rounded-lg text-left transition-colors',
+                          option.enabled
+                            ? 'border-border hover:border-primary hover:bg-primary/5 cursor-pointer'
+                            : 'border-border/50 bg-muted/30 cursor-not-allowed opacity-50'
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-foreground">{option.label}</p>
+                            <p className="text-sm text-muted">{option.description}</p>
+                          </div>
+                          {option.enabled && (
+                            <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          )}
+                          {!option.enabled && (
+                            <span className="text-xs text-muted bg-muted/50 px-2 py-1 rounded">
+                              Not Supported
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Step 2: Task Select (ADD_DELETE_ONLY or ALL Mode) */}
+          {selectedChangeType && needsActionSelection && !selectedAction && (
+            <div>
+              {/* Display selected passenger */}
+              <div className="mb-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-sm text-muted">Selected Passenger</p>
+                <p className="font-medium text-foreground">
+                  {selectedPax?.fullName} ({selectedPax?.ptcLabel})
+                </p>
+              </div>
+
+              <label className="block text-sm font-medium text-foreground mb-2">
+                Select Action
+              </label>
+              <div className="space-y-2">
+                {allowedChanges.allowedActions.map((action) => (
+                  <button
+                    key={action}
+                    onClick={() => setSelectedAction(action)}
+                    className="w-full p-3 border border-border rounded-lg text-left hover:border-primary hover:bg-primary/5 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-foreground">{ACTION_LABELS[action].label}</p>
+                        <p className="text-sm text-muted">{ACTION_LABELS[action].description}</p>
+                      </div>
+                      <svg className="w-5 h-5 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Change Form */}
+          {isReadyForForm && selectedPax && (
+            <div>
+              {/* Display selected passenger + action */}
+              <div className="mb-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-sm text-muted">Selected Passenger</p>
+                <p className="font-medium text-foreground">
+                  {selectedPax.fullName} ({selectedPax.ptcLabel})
+                </p>
+                {needsActionSelection && (
+                  <p className="text-sm text-primary mt-1">
+                    Action: {ACTION_LABELS[selectedAction].label}
+                  </p>
+                )}
+              </div>
+
+              {/* Name Change Form */}
+              {selectedChangeType === 'NAME' && (
+                <NameChangeForm
+                  currentSurname={selectedPax.property}
+                  currentGivenName={selectedPax.givenName}
+                  currentTitle={selectedPax.title}
+                  onSubmit={submitChange}
+                  onCancel={handleBack}
+                  isSubmitting={isSubmitting}
+                />
+              )}
+
+              {/* Contact Form - Different forms based on action */}
+              {selectedChangeType === 'CONTACT' && selectedAction === 'MODIFY' && (
+                <ContactChangeForm
+                  currentEmail={selectedPax.email}
+                  currentPhone={selectedPax.mobile}
+                  onSubmit={submitChange}
+                  onCancel={handleBack}
+                  isSubmitting={isSubmitting}
+                />
+              )}
+
+              {selectedChangeType === 'CONTACT' && (selectedAction === 'ADD' || selectedAction === 'DELETE') && (
+                <ContactAddDeleteForm
+                  currentEmail={selectedPax.email}
+                  currentPhone={selectedPax.mobile}
+                  // ⚠️ v3.13.1: Fallback contactInfoId (used when contactDetails is absent)
+                  contactInfoId={selectedPax.contactInfoRefIds?.[0]}
+                  // ⚠️ v3.13.0: Used for contact selection during delete
+                  contactDetails={selectedPax.contactDetails}
+                  action={selectedAction}
+                  onSubmit={submitChange}
+                  onCancel={handleBack}
+                  isSubmitting={isSubmitting}
+                />
+              )}
+
+              {/* Passport Information change Form */}
+              {selectedChangeType === 'APIS' && (
+                <ApisChangeForm
+                  currentApis={selectedPax.apisInfo}
+                  departureDate={departureDate}
+                  action={selectedAction}
+                  onSubmit={submitChange}
+                  onCancel={handleBack}
+                  isSubmitting={isSubmitting}
+                />
+              )}
+
+              {/* Mileage Change Form */}
+              {selectedChangeType === 'FFN' && (
+                <FfnChangeForm
+                  currentFfn={selectedPax.ffn}
+                  carrierCode={carrierCode}
+                  action={selectedAction}
+                  onSubmit={submitChange}
+                  onCancel={handleBack}
+                  isSubmitting={isSubmitting}
+                />
+              )}
+
+              {/* Residence Information change Form */}
+              {selectedChangeType === 'DOCA' && (
+                <DocaChangeForm
+                  currentDoca={selectedPax.docaInfo}
+                  action={selectedAction}
+                  onSubmit={submitChange}
+                  onCancel={handleBack}
+                  isSubmitting={isSubmitting}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

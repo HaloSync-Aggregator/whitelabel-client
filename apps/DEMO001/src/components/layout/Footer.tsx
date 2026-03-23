@@ -1,0 +1,140 @@
+// @template Footer
+// @version 4.0.0 (synced from template)
+// @description Template for layout/Footer.tsx
+
+import * as React from 'react';
+import { Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
+
+export interface FooterProps {
+  className?: string;
+}
+
+const Footer = React.forwardRef<HTMLElement, FooterProps>(({ className }, ref) => {
+  const currentYear = new Date().getFullYear();
+
+  const linkSections = [
+    {
+      title: 'Service',
+      items: [
+        { label: 'Flight Search', href: '/', external: false },
+      ],
+    },
+    {
+      title: 'Company',
+      items: [
+        { label: 'About Us', href: '#', external: true },
+        { label: 'Terms of Service', href: '#', external: true },
+        { label: 'Privacy Policy', href: '#', external: true },
+      ],
+    },
+  ];
+
+  const supportedAirlines = [
+    { code: 'AF', name: 'Air France' },
+    { code: 'KL', name: 'KLM Royal Dutch Airlines' },
+    { code: 'QR', name: 'Qatar Airways' },
+  ];
+
+  return (
+    <footer
+      ref={ref}
+      className={cn('bg-gray-50 py-6 px-4 pb-24 md:pb-6', className)}
+    >
+      <div className="container mx-auto max-w-6xl">
+        {/* Brand Section */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <img
+              src="/images/logo-placeholder.svg"
+              alt="SkyDemo"
+              className="h-6"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const fallback = e.currentTarget.nextElementSibling;
+                if (fallback) {
+                  (fallback as HTMLElement).style.display = 'flex';
+                }
+              }}
+            />
+            <div className="hidden items-center" style={{ display: 'none' }}>
+              <div className="w-6 h-6 rounded bg-primary flex items-center justify-center text-white font-bold text-xs">
+                HS
+              </div>
+            </div>
+          </div>
+          <p className="text-sm text-gray-500">
+            SkyDemo Travel Agency - Convenient Flight Booking Service
+          </p>
+        </div>
+
+        {/* Links + Airlines Section */}
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {linkSections.map((section) => (
+            <div key={section.title}>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">{section.title}</h3>
+              <ul className="space-y-2">
+                {section.items.map((item) => (
+                  <li key={item.href}>
+                    {item.external ? (
+                      <a
+                        href={item.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-gray-500 hover:text-primary transition-colors"
+                      >
+                        {item.label}
+                      </a>
+                    ) : (
+                      <Link
+                        to={item.href}
+                        className="text-sm text-gray-500 hover:text-primary transition-colors"
+                      >
+                        {item.label}
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+
+          {/* Supported Airlines */}
+          <div className="col-span-2 lg:col-span-1">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Supported Airlines</h3>
+            <div className="flex flex-wrap gap-2">
+              {supportedAirlines.map((airline) => (
+                <div
+                  key={airline.code}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white rounded-lg border border-gray-200"
+                  title={airline.name}
+                >
+                  <img
+                    src={`https://pics.avs.io/36/36/${airline.code}.png`}
+                    alt={airline.name}
+                    className="w-5 h-5 object-contain"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                  <span className="text-xs font-medium text-gray-600">{airline.code}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Copyright */}
+        <div className="pt-4 border-t border-gray-200">
+          <p className="text-xs text-gray-400 text-center">
+            &copy; {currentYear} SkyDemo Travel Agency. All rights reserved.
+          </p>
+        </div>
+      </div>
+    </footer>
+  );
+});
+
+Footer.displayName = 'Footer';
+
+export { Footer };

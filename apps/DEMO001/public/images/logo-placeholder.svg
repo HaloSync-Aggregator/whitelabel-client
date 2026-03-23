@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40" width="160" height="40">
+  <rect width="160" height="40" rx="6" fill="#1e3a5f"/>
+  <text x="12" y="27" font-family="system-ui, sans-serif" font-size="18" font-weight="600" fill="#ffffff">SkyDemo</text>
+  <path d="M130 12 l8 8 l-3 0 l5 8 l-5 0 l3 0 l-8-8 l3 0 z" fill="#60a5fa" opacity="0.8" transform="rotate(-20 134 20)"/>
+</svg>
