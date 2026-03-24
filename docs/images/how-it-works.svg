@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 280" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="920" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f8f9fc"/>
+      <stop offset="100%" stop-color="#f0f2f8"/>
+    </linearGradient>
+    <linearGradient id="card1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6c5ce7"/>
+      <stop offset="100%" stop-color="#5a4bd1"/>
+    </linearGradient>
+    <linearGradient id="card2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0984e3"/>
+      <stop offset="100%" stop-color="#0770c2"/>
+    </linearGradient>
+    <linearGradient id="card3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#00b894"/>
+      <stop offset="100%" stop-color="#00a381"/>
+    </linearGradient>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#1a1a2e" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="920" height="280" rx="16" fill="url(#bg)"/>
+
+  <!-- Step 1: Provisioning -->
+  <g filter="url(#shadow)">
+    <rect x="30" y="30" width="250" height="220" rx="12" fill="white"/>
+    <rect x="30" y="30" width="250" height="6" rx="3" fill="url(#card1)"/>
+  </g>
+  <text x="56" y="66" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#6c5ce7" letter-spacing="1.5">STEP 1</text>
+  <text x="56" y="90" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="700" fill="#1a1a2e">Provisioning</text>
+  <line x1="56" y1="102" x2="240" y2="102" stroke="#e8e6f0" stroke-width="1"/>
+  <text x="56" y="124" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#64638a">Onboard &amp; receive credentials</text>
+
+  <circle cx="68" cy="152" r="4" fill="#6c5ce7"/>
+  <text x="80" y="156" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Tenant ID</text>
+  <circle cx="68" cy="178" r="4" fill="#6c5ce7"/>
+  <text x="80" y="182" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">API Secret</text>
+  <circle cx="68" cy="204" r="4" fill="#6c5ce7"/>
+  <text x="80" y="208" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Airline Access</text>
+
+  <!-- Arrow 1 -->
+  <g>
+    <line x1="290" y1="140" x2="325" y2="140" stroke="#c8c6d8" stroke-width="2"/>
+    <polygon points="325,134 337,140 325,146" fill="#c8c6d8"/>
+  </g>
+
+  <!-- Step 2: Middleware -->
+  <g filter="url(#shadow)">
+    <rect x="340" y="30" width="250" height="220" rx="12" fill="white"/>
+    <rect x="340" y="30" width="250" height="6" rx="3" fill="url(#card2)"/>
+  </g>
+  <text x="366" y="66" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#0984e3" letter-spacing="1.5">STEP 2</text>
+  <text x="366" y="90" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="700" fill="#1a1a2e">Middleware</text>
+  <line x1="366" y1="102" x2="550" y2="102" stroke="#dce8f0" stroke-width="1"/>
+  <text x="366" y="124" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#64638a">Generate NDC API middleware</text>
+
+  <circle cx="378" cy="152" r="4" fill="#0984e3"/>
+  <text x="390" y="156" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Backend API</text>
+  <circle cx="378" cy="178" r="4" fill="#0984e3"/>
+  <text x="390" y="182" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Airline Routes</text>
+  <circle cx="378" cy="204" r="4" fill="#0984e3"/>
+  <text x="390" y="208" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Auth &amp; Config</text>
+
+  <!-- Arrow 2 -->
+  <g>
+    <line x1="600" y1="140" x2="635" y2="140" stroke="#c8c6d8" stroke-width="2"/>
+    <polygon points="635,134 647,140 635,146" fill="#c8c6d8"/>
+  </g>
+
+  <!-- Step 3: Frontend -->
+  <g filter="url(#shadow)">
+    <rect x="650" y="30" width="250" height="220" rx="12" fill="white"/>
+    <rect x="650" y="30" width="250" height="6" rx="3" fill="url(#card3)"/>
+  </g>
+  <text x="676" y="66" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#00b894" letter-spacing="1.5">STEP 3</text>
+  <text x="676" y="90" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="700" fill="#1a1a2e">Frontend</text>
+  <line x1="676" y1="102" x2="860" y2="102" stroke="#d4ece6" stroke-width="1"/>
+  <text x="676" y="124" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#64638a">Generate booking website</text>
+
+  <circle cx="688" cy="152" r="4" fill="#00b894"/>
+  <text x="700" y="156" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Vite + React SPA</text>
+  <circle cx="688" cy="178" r="4" fill="#00b894"/>
+  <text x="700" y="182" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Branded UI</text>
+  <circle cx="688" cy="204" r="4" fill="#00b894"/>
+  <text x="700" y="208" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Full Booking Flow</text>
+</svg>

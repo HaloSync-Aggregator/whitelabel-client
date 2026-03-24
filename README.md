@@ -27,18 +27,9 @@ Each generated site is a **pure static frontend** (HTML/JS/CSS) deployable to S3
 
 To build and run your own whitelabel flight booking site, follow these three steps:
 
-```
-Step 1                    Step 2                    Step 3
-Provisioning              Middleware                Frontend
-┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│ Sign up &        │────▶│ Generate NDC     │────▶│ Generate booking │
-│ get credentials  │      │ API middleware   │      │ website          │
-│                  │      │                  │      │                  │
-│ → Tenant ID      │      │ → Backend API    │      │ → Vite+React SPA │
-│ → API Key        │      │ → Airline routes │      │ → Branded UI     │
-│ → Airline access │      │ → Auth & config  │      │ → Full lifecycle │
-└─────────────────┘      └─────────────────┘      └─────────────────┘
-```
+<p align="center">
+  <img src="./docs/images/how-it-works.svg" alt="How It Works - 3 Step Flow" width="100%">
+</p>
 
 ### Step 1: Provisioning (Onboarding)
 
@@ -105,17 +96,9 @@ Generate a whitelabel site for tenant {tenant-id}.
 
 Once the design system is ready, the 3-stage agent pipeline generates the complete application:
 
-```
- Design System          Components              Pages
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ design-system-   │──▶│ component-       │──▶│ app-builder      │
-│ setup            │    │ builder          │    │                  │
-│                  │    │                  │    │ Search page      │
-│ tailwind.config  │    │ Header, Footer   │    │ Results page     │
-│ globals.css      │    │ FlightCard       │    │ Booking page     │
-│ tenant.ts        │    │ SeatMap, etc.    │    │ Cancel page      │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-```
+<p align="center">
+  <img src="./docs/images/generation-pipeline.svg" alt="Generation Pipeline - 3 Stage Agent" width="100%">
+</p>
 
 ## Features
 

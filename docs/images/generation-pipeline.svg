@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 280" fill="none">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="920" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f8f9fc"/>
+      <stop offset="100%" stop-color="#f0f2f8"/>
+    </linearGradient>
+    <linearGradient id="stage1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a29bfe"/>
+      <stop offset="100%" stop-color="#8c82fc"/>
+    </linearGradient>
+    <linearGradient id="stage2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fd79a8"/>
+      <stop offset="100%" stop-color="#e8608e"/>
+    </linearGradient>
+    <linearGradient id="stage3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fdcb6e"/>
+      <stop offset="100%" stop-color="#e8b85b"/>
+    </linearGradient>
+    <filter id="shadow2" x="-4%" y="-4%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#1a1a2e" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="920" height="280" rx="16" fill="url(#bg2)"/>
+
+  <!-- Stage 1: Design System -->
+  <g filter="url(#shadow2)">
+    <rect x="30" y="30" width="250" height="220" rx="12" fill="white"/>
+    <rect x="30" y="30" width="250" height="6" rx="3" fill="url(#stage1)"/>
+  </g>
+  <text x="56" y="66" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#a29bfe" letter-spacing="1.5">STAGE 1</text>
+  <text x="56" y="90" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="700" fill="#1a1a2e">Design System</text>
+  <text x="56" y="108" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#8c82fc">design-system-setup</text>
+  <line x1="56" y1="120" x2="240" y2="120" stroke="#e8e6f0" stroke-width="1"/>
+
+  <g>
+    <rect x="56" y="134" width="12" height="12" rx="2" fill="#f0effe"/>
+    <text x="56" y="143" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#a29bfe" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="76" y="144" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">tailwind.config.ts</text>
+
+  <g>
+    <rect x="56" y="160" width="12" height="12" rx="2" fill="#f0effe"/>
+    <text x="56" y="169" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#a29bfe" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="76" y="170" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">globals.css</text>
+
+  <g>
+    <rect x="56" y="186" width="12" height="12" rx="2" fill="#f0effe"/>
+    <text x="56" y="195" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#a29bfe" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="76" y="196" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">tenant.ts</text>
+
+  <!-- Arrow 1 -->
+  <g>
+    <line x1="290" y1="140" x2="325" y2="140" stroke="#c8c6d8" stroke-width="2"/>
+    <polygon points="325,134 337,140 325,146" fill="#c8c6d8"/>
+  </g>
+
+  <!-- Stage 2: Components -->
+  <g filter="url(#shadow2)">
+    <rect x="340" y="30" width="250" height="220" rx="12" fill="white"/>
+    <rect x="340" y="30" width="250" height="6" rx="3" fill="url(#stage2)"/>
+  </g>
+  <text x="366" y="66" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fd79a8" letter-spacing="1.5">STAGE 2</text>
+  <text x="366" y="90" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="700" fill="#1a1a2e">Components</text>
+  <text x="366" y="108" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#e8608e">component-builder</text>
+  <line x1="366" y1="120" x2="550" y2="120" stroke="#f0dce4" stroke-width="1"/>
+
+  <g>
+    <rect x="366" y="134" width="12" height="12" rx="2" fill="#fef0f5"/>
+    <text x="366" y="143" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#fd79a8" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="386" y="144" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Header, Footer</text>
+
+  <g>
+    <rect x="366" y="160" width="12" height="12" rx="2" fill="#fef0f5"/>
+    <text x="366" y="169" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#fd79a8" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="386" y="170" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">FlightCard, SeatMap</text>
+
+  <g>
+    <rect x="366" y="186" width="12" height="12" rx="2" fill="#fef0f5"/>
+    <text x="366" y="195" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#fd79a8" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="386" y="196" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Forms, Modals, etc.</text>
+
+  <!-- Arrow 2 -->
+  <g>
+    <line x1="600" y1="140" x2="635" y2="140" stroke="#c8c6d8" stroke-width="2"/>
+    <polygon points="635,134 647,140 635,146" fill="#c8c6d8"/>
+  </g>
+
+  <!-- Stage 3: Pages -->
+  <g filter="url(#shadow2)">
+    <rect x="650" y="30" width="250" height="220" rx="12" fill="white"/>
+    <rect x="650" y="30" width="250" height="6" rx="3" fill="url(#stage3)"/>
+  </g>
+  <text x="676" y="66" font-family="Inter, system-ui, sans-serif" font-size="11" font-weight="600" fill="#fdcb6e" letter-spacing="1.5">STAGE 3</text>
+  <text x="676" y="90" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="700" fill="#1a1a2e">Pages</text>
+  <text x="676" y="108" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#e8b85b">app-builder</text>
+  <line x1="676" y1="120" x2="860" y2="120" stroke="#f0eade" stroke-width="1"/>
+
+  <g>
+    <rect x="676" y="134" width="12" height="12" rx="2" fill="#fef9ee"/>
+    <text x="676" y="143" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#fdcb6e" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="696" y="144" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Search Page</text>
+
+  <g>
+    <rect x="676" y="160" width="12" height="12" rx="2" fill="#fef9ee"/>
+    <text x="676" y="169" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#fdcb6e" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="696" y="170" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Results Page</text>
+
+  <g>
+    <rect x="676" y="186" width="12" height="12" rx="2" fill="#fef9ee"/>
+    <text x="676" y="195" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#fdcb6e" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="696" y="196" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Booking Page</text>
+
+  <g>
+    <rect x="676" y="212" width="12" height="12" rx="2" fill="#fef9ee"/>
+    <text x="676" y="221" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#fdcb6e" text-anchor="middle" dx="6">&#x2714;</text>
+  </g>
+  <text x="696" y="222" font-family="Inter, system-ui, sans-serif" font-size="12" fill="#3d3b5c">Cancel Page</text>
+</svg>
