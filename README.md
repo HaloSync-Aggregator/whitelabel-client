@@ -1,115 +1,136 @@
-[English](./README.en.md) | 한국어
+English | [한국어](./README.ko.md)
 
 # Whitelabel Flight Booking Platform
 
-OTA가 몇 분 안에 브랜드형 항공 예약 웹사이트를 시작할 수 있도록 돕는 멀티 테넌트 화이트라벨 프론트엔드 생성 플랫폼입니다. Claude Code의 멀티 에이전트 구조와 PolarHub NDC API를 기반으로 합니다.
+A multi-tenant whitelabel frontend generation platform that enables OTAs to launch branded flight booking websites in minutes. Powered by Claude Code's multi-agent architecture and the PolarHub NDC API.
 
 ## Live Demo
 
-데모는 **[demo.halosync.kr/demo](https://demo.halosync.kr/)** 에서 확인할 수 있습니다.
+Try the platform at **[demo.halosync.kr/demo](https://demo.halosync.kr/)**
 
-> 이 데모는 항공사 테스트 시스템에 연결된 샌드박스 환경입니다. 실제 예약은 생성되지 않습니다.
+> This is a sandbox environment connected to airline test systems. No real bookings are created.
 
-## 개요
+## Overview
 
-항공 예약 웹사이트를 처음부터 만드는 일은 비용도 크고 시간도 많이 듭니다. 이 플랫폼은 브랜드 정보만 정의하면 검색, 예약, 좌석 선택, 부가서비스, 예약 후 관리까지 포함된 **Vite + React SPA**를 자동 생성합니다.
+Building a flight booking website from scratch is expensive and time-consuming. This platform automates the process: define your brand (colors, logo, fonts), and a multi-agent system generates a fully functional **Vite + React SPA** with search, booking, seat selection, ancillary services, and post-booking management.
 
-생성된 사이트는 모두 S3 + CloudFront 등에 바로 배포할 수 있는 **정적 프론트엔드(HTML/JS/CSS)** 이며, 12개 이상 항공사의 NDC 연동 복잡성은 **PolarHub NDC Middleware**가 처리합니다.
+Each generated site is a **pure static frontend** (HTML/JS/CSS) deployable to S3 + CloudFront, and connects to the **PolarHub NDC API** middleware, which handles the complexity of communicating with 12+ airlines through the NDC standard.
 
-### 핵심 포인트
+### Key Highlights
 
-- **멀티 에이전트 코드 생성**: Claude Code 에이전트가 디자인 토큰, 컴포넌트, 페이지를 3단계 파이프라인으로 생성
-- **12개 항공사 지원**: 항공사별 분기 로직을 템플릿과 서비스 레이어에서 처리
-- **전체 예약 라이프사이클 지원**: 검색부터 변경, 취소, 환불까지 포함
-- **샘플 테넌트 포함**: `apps/DEMO001`로 실제 참고 가능한 앱과 CI 기준 제공
+- **Multi-agent code generation** — Claude Code agents handle design tokens, components, and pages in a 3-stage pipeline
+- **12 airlines supported** — each with carrier-specific API branching handled automatically
+- **Full booking lifecycle** — from search to post-booking management (changes, cancellations, refunds)
+- **Sample tenant included** — `apps/DEMO001` provides a working reference app and CI baseline
 
-## 동작 방식
+## How It Works
 
-자체 화이트라벨 항공 예약 사이트를 만들고 실행하려면 아래 3단계를 따르면 됩니다.
-
-```mermaid
-graph LR
-    A["<b>1단계: 프로비저닝</b><br/>온보딩 및 자격증명 수령<br/><br/>→ Tenant ID<br/>→ API Key<br/>→ Airline access"] -->|생성| B["<b>2단계: 미들웨어</b><br/>NDC API 미들웨어 생성<br/><br/>→ Backend API<br/>→ Airline routes<br/>→ Auth &amp; config"] -->|생성| C["<b>3단계: 프론트엔드</b><br/>예약 웹사이트 생성<br/><br/>→ Vite+React SPA<br/>→ 브랜드 UI<br/>→ 전체 예약 흐름"]
-```
-
-### 1단계: 프로비저닝(온보딩)
-
-온보딩을 완료하면 아래 정보를 받게 됩니다.
-- **Tenant ID**: OTA를 구분하는 고유 식별자
-- **API Key**: PolarHub NDC API 인증용 키
-- **Airline access**: 계정에 활성화된 항공사 목록
-
-> 온보딩 포털은 아직 준비 중입니다. 조기 접근이 필요하면 GitHub issue로 문의해 주세요.
-
-### 2단계: 미들웨어 생성
-
-**PolarHub NDC Middleware**는 항공사 NDC 통신, 인증, 항공사별 프로토콜 차이를 처리하는 백엔드입니다. 이 역시 Claude Code로 생성됩니다.
-
-> **미들웨어 저장소**: [whitelabel-middleware](https://github.com/HaloSync-Aggregator/whitelabel-middleware)
-
-미들웨어 저장소를 clone한 뒤, 1단계에서 받은 자격정보를 이용해 테넌트 전용 미들웨어를 생성하세요. 자세한 설정은 미들웨어 README를 참고하면 됩니다.
-
-### 3단계: 프론트엔드 생성(이 저장소)
-
-미들웨어가 실행 중이면 이 저장소를 사용해 브랜드형 예약 웹사이트를 생성할 수 있습니다. 자세한 절차는 아래 [Quick Start](#quick-start)를 참고하세요.
-
-#### 디자인 시스템
-
-디자인 시스템은 테넌트의 시각적 아이덴티티를 정의합니다. 색상, 타이포그래피, 간격, 그림자, 레이아웃 등을 포함하며 아래 3가지 방식으로 준비할 수 있습니다.
-
-**옵션 1: 기존 웹사이트에서 추출하기**
-
-`design-analyzer` 에이전트에 레퍼런스 URL을 주면 로고, 색상, 폰트, 레이아웃, 컴포넌트 사양을 분석해 디자인 토큰으로 정리합니다.
+To build and run your own whitelabel flight booking site, follow these three steps:
 
 ```
-# Claude Code에서
+Step 1                    Step 2                    Step 3
+Provisioning              Middleware                Frontend
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│ Sign up &        │────▶│ Generate NDC     │────▶│ Generate booking │
+│ get credentials  │      │ API middleware   │      │ website          │
+│                  │      │                  │      │                  │
+│ → Tenant ID      │      │ → Backend API    │      │ → Vite+React SPA │
+│ → API Key        │      │ → Airline routes │      │ → Branded UI     │
+│ → Airline access │      │ → Auth & config  │      │ → Full lifecycle │
+└─────────────────┘      └─────────────────┘      └─────────────────┘
+```
+
+### Step 1: Provisioning (Onboarding)
+
+To use PolarHub NDC API, you must complete onboarding first. After onboarding, you will receive:
+- **Tenant ID** (`POLARHUB_TENANT_ID`) — unique identifier for your OTA
+- **API Secret** (`POLARHUB_API_SECRET`) — Base64-encoded authentication key
+- **Airline access** — list of airlines enabled for your account
+
+**How to onboard:**
+
+Send an onboarding request to **contact@halosync.kr** with your company name and use case. The team will issue your Sandbox credentials.
+
+> Automated self-service onboarding portal is currently in progress.
+
+### Step 2: Generate the Middleware
+
+The **PolarHub NDC Middleware** is the backend that handles airline NDC communication, authentication, and carrier-specific protocol differences. It is also generated via Claude Code:
+
+> **Middleware repository**: [whitelabel-middleware](https://github.com/HaloSync-Aggregator/whitelabel-middleware)
+
+Clone the middleware repo and use Claude Code to generate your tenant-specific middleware instance with the credentials from Step 1. See the middleware README for setup instructions.
+
+### Step 3: Generate the Frontend (this repo)
+
+With the middleware running, generate your branded booking website using this repository. See [Quick Start](#quick-start) for detailed setup instructions.
+
+#### Design System
+
+The design system defines your tenant's visual identity — colors, typography, spacing, shadows, and layout. There are three ways to set it up:
+
+**Option 1: Extract from an existing website (recommended for rebranding)**
+
+Point the `design-analyzer` agent at a reference URL. It crawls the site and extracts logos, colors, fonts, layout structure, and component specs into design tokens.
+
+```
+# In Claude Code
 @design-analyzer
 Analyze https://your-travel-site.com and extract design tokens for tenant DEMO001.
 ```
 
-**옵션 2: design-system.json 직접 작성**
+**Option 2: Manually create design-system.json**
 
-기본 템플릿을 복사해서 브랜드에 맞게 수정합니다.
+Copy the default template and customize it to match your brand:
 
 ```bash
+# Copy the template
 mkdir -p tenant/{tenant-id}
 cp .claude/skills/whitelabel-dev/templates/config/design-system.json tenant/{tenant-id}/
+
+# Edit colors, fonts, spacing to match your brand
 ```
 
-그 다음 색상, 폰트, 간격 값을 수정하면 됩니다.
+**Option 3: Use the default template**
 
-**옵션 3: 기본 템플릿 사용**
-
-별도 디자인 설정이 없으면 기본 템플릿(구글 스타일 블루 테마, Roboto 기반)을 사용합니다. 빠른 프로토타이핑에 적합합니다.
+If no design configuration is provided, the platform uses a built-in default template (Google-inspired blue theme with Roboto typography). Good for quick prototyping.
 
 ```
+# Just run whitelabel-dev — it will use the default template automatically
 /whitelabel-dev
 Generate a whitelabel site for tenant {tenant-id}.
 ```
 
-#### 생성 파이프라인
+#### Generation Pipeline
 
-디자인 시스템이 준비되면 3단계 에이전트 파이프라인이 전체 애플리케이션을 생성합니다.
+Once the design system is ready, the 3-stage agent pipeline generates the complete application:
 
-```mermaid
-graph LR
-    A["<b>디자인 시스템</b><br/>design-system-setup<br/><br/>tailwind.config<br/>globals.css<br/>tenant.ts"] --> B["<b>컴포넌트</b><br/>component-builder<br/><br/>Header, Footer<br/>FlightCard<br/>SeatMap 등"] --> C["<b>페이지</b><br/>app-builder<br/><br/>검색 페이지<br/>결과 페이지<br/>예약 페이지<br/>취소 페이지"]
+```
+ Design System          Components              Pages
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│ design-system-   │──▶│ component-       │──▶│ app-builder      │
+│ setup            │    │ builder          │    │                  │
+│                  │    │                  │    │ Search page      │
+│ tailwind.config  │    │ Header, Footer   │    │ Results page     │
+│ globals.css      │    │ FlightCard       │    │ Booking page     │
+│ tenant.ts        │    │ SeatMap, etc.    │    │ Cancel page      │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-## 기능
+## Features
 
-| 분류 | 기능 |
+| Category | Capabilities |
 |----------|-------------|
-| **검색 및 예약** | 편도/왕복 검색, OfferPrice, 승객 입력, 예약 생성 |
-| **좌석 선택** | 인터랙티브 좌석 맵, 항공사별 무료/유료/제한 좌석 처리 |
-| **부가서비스** | 수하물, 기내식 등 추가 서비스와 중량 기반 bookingInstructions 처리 |
-| **예약 후 관리** | 승객 정보 변경, 여정 변경, 취소 및 환불 견적 |
-| **발권 흐름** | Hold-to-ticketing, 서비스 포함 발권, 2단계 결제 흐름 |
-| **테넌트 브랜딩** | 로고, 색상, 폰트, 레이아웃을 테넌트별로 구성 가능 |
+| **Search & Book** | One-way / round-trip search, offer pricing, passenger input, booking creation |
+| **Seat Selection** | Interactive seat map, carrier-specific pricing (free / paid / restricted) |
+| **Ancillary Services** | Baggage, meals, and other add-ons with weight-based booking instructions |
+| **Post-Booking** | Passenger info changes, journey changes, cancellation & refund quotes |
+| **Ticketing** | Hold-to-ticketing, ticketing with services, two-step payment flows |
+| **Per-Tenant Branding** | Logo, color palette, typography, layout — all configurable per tenant |
 
-## 지원 항공사
+## Supported Airlines
 
-| 코드 | 항공사 | Booking | Seat | Service | Post-Booking |
+| Code | Airline | Booking | Seat | Service | Post-Booking |
 |------|---------|:-------:|:----:|:-------:|:------------:|
 | AY | Finnair | Y | Y | Y | Y |
 | SQ | Singapore Airlines | Y | Y | Y | Y |
@@ -124,171 +145,178 @@ graph LR
 | HA | Hawaiian Airlines | Y | Y | Y | Y |
 | BA | British Airways | Y | - | - | - |
 
-`Y` = 지원, `*` = 부분 지원 또는 노선 의존, `-` = 미지원
+`Y` = Supported, `*` = Partial / route-dependent, `-` = Not available
 
-항공사별 상세 capability는 [docs/carrier-support-matrix.md](./docs/carrier-support-matrix.md)를 참고하세요.
+For detailed per-carrier capabilities (seat patterns, service groups, ticketing flows, pax change modes), see [docs/carrier-support-matrix.md](./docs/carrier-support-matrix.md).
 
-## 기술 스택
+## Tech Stack
 
-- **빌드 도구**: Vite 5
-- **프레임워크**: React 18 / React Router 6 / TypeScript
-- **스타일링**: Tailwind CSS 3
-- **배포 형태**: 정적 파일(S3 + CloudFront, nginx, 기타 CDN)
-- **AI 도구**: Claude Code Max 이상
-- **백엔드**: [PolarHub NDC Middleware](https://github.com/HaloSync-Aggregator/whitelabel-middleware)
-- **검증**: GitHub Actions CI + 로컬 lint/typecheck/build
+- **Build Tool**: Vite 5
+- **Framework**: React 18 / React Router 6 / TypeScript
+- **Styling**: Tailwind CSS 3
+- **Deployment**: Static files (S3 + CloudFront, nginx, or any CDN)
+- **AI Tooling**: Claude Code Max plan+ (multi-agent architecture)
+- **Backend**: [PolarHub NDC Middleware](https://github.com/HaloSync-Aggregator/whitelabel-middleware) (also generated via Claude Code)
+- **Testing**: GitHub Actions CI + local lint/typecheck/build validation
 
 ## Quick Start
 
-### 사전 준비
+### Prerequisites
 
-- [Claude Code](https://claude.ai/code) Max 플랜 이상
-- 실행 가능한 [PolarHub NDC Middleware](https://github.com/HaloSync-Aggregator/whitelabel-middleware)
-- Node.js 18 이상
-- npm 9 이상
+- [Claude Code](https://claude.ai/code) with **Max plan or higher** (required for multi-agent generation)
+- [PolarHub NDC Middleware](https://github.com/HaloSync-Aggregator/whitelabel-middleware) — running instance (see [Step 2](#step-2-generate-the-middleware))
+- Node.js >= 18
+- npm >= 9
 
-### 설정
+### Setup
 
 ```bash
+# Clone the repository
 git clone <repository-url>
 cd whitelabel-client
 
+# Configure frontend environment variables
 cp .env.example .env
+# Edit .env for your local middleware connection
 ```
 
-`.env`에서 필요한 값:
+Required variables in `.env` ([see .env.example](./.env.example)):
 
-| 변수 | 설명 | 예시 |
+| Variable | Description | Example |
 |----------|-------------|---------|
-| `VITE_MIDDLEWARE_URL` | 로컬 개발 시 미들웨어 주소 | `http://localhost:3000` |
-| `VITE_BASE_PATH` | SPA를 서브패스로 배포할 때 사용할 base path | `/` |
+| `VITE_MIDDLEWARE_URL` | Your middleware instance URL for local dev | `http://localhost:3000` |
+| `VITE_BASE_PATH` | Base path used when serving the SPA under a subpath | `/` |
 
 ```bash
+# Export the variables for the current shell
 source scripts/env.sh
 
+# Install and run an existing tenant app
 cd apps/DEMO001
 npm install
 npm run dev
 ```
 
-> 이 프론트엔드 저장소는 PolarHub API credential 자체를 보관하지 않습니다. 항공사/PolarHub credential은 미들웨어 저장소에서 관리하고, 여기서는 `VITE_MIDDLEWARE_URL`로 연결만 설정합니다.
+> **Note**: This frontend repo does not store PolarHub API credentials. Configure airline and PolarHub secrets in the middleware repo, then point this app at that middleware with `VITE_MIDDLEWARE_URL`.
 
-> Vite 개발 서버 기본 포트는 `5173`이고, 미들웨어는 보통 `3000`에서 실행합니다. 따라서 `.env`에는 일반적으로 `VITE_MIDDLEWARE_URL=http://localhost:3000`를 설정합니다.
+> **Port note**: Vite dev server defaults to port 5173. The middleware runs separately (commonly port 3000). Set `VITE_MIDDLEWARE_URL=http://localhost:3000` in `.env` so the frontend knows where to reach the middleware.
 
-[http://localhost:5173](http://localhost:5173) 에 접속해서 검색 화면이 뜨는지 확인하세요.
+Open [http://localhost:5173](http://localhost:5173) — you should see the search form. Try searching for a flight to verify the middleware connection.
 
-### 새 테넌트 사이트 생성
+### Generate a New Tenant Site
 
-Claude Code에서 `/whitelabel-dev` 스킬을 사용합니다.
+In Claude Code, use the `/whitelabel-dev` skill:
 
 ```
+# Example prompt in Claude Code
 /whitelabel-dev
 Generate a whitelabel site for tenant DEMO001.
 Use https://example-travel.com as the design reference.
 ```
 
-생성 결과 예시는 다음과 같습니다.
+The agent pipeline will generate the following structure:
 
 ```
 apps/DEMO001/
-├── index.html
-├── vite.config.ts
-├── tailwind.config.ts
+├── index.html                     # HTML entry point
+├── vite.config.ts                 # Vite build configuration
+├── tailwind.config.ts             # Brand colors, fonts
 ├── package.json
-├── nginx.conf
-├── Dockerfile
+├── nginx.conf                     # SPA routing (production)
+├── Dockerfile                     # 2-stage build (node → nginx)
 └── src/
-    ├── main.tsx
-    ├── App.tsx
+    ├── main.tsx                   # React entry (BrowserRouter)
+    ├── App.tsx                    # Route definitions (5 routes)
     ├── app/
-    │   ├── globals.css
-    │   ├── page.tsx
-    │   ├── results/page.tsx
-    │   ├── booking/page.tsx
-    │   ├── booking/[id]/page.tsx
-    │   └── booking/[id]/cancel/page.tsx
-    ├── components/
+    │   ├── globals.css            # CSS variables, utilities
+    │   ├── page.tsx               # Home (search form)
+    │   ├── results/page.tsx       # Search results
+    │   ├── booking/page.tsx       # Passenger input
+    │   ├── booking/[id]/page.tsx  # Booking detail
+    │   └── booking/[id]/cancel/page.tsx  # Cancellation
+    ├── components/                # UI components (~55 files)
     ├── lib/
-    │   ├── tenant.ts
-    │   └── api/
-    └── types/
+    │   ├── tenant.ts              # Tenant config (POINT_OF_SALE, AGENCY_ID, etc.)
+    │   └── api/                   # Service layer (23 functions) + transformers
+    └── types/                     # TypeScript definitions (12 files)
 ```
 
-생성된 앱 실행:
+Then run the generated app:
 
 ```bash
 cd apps/DEMO001
 npm install && npm run dev
 ```
 
-프로덕션 배포:
-
+For production deployment (S3 + CloudFront):
 ```bash
-npm run build
+npm run build   # Output: dist/ (index.html + assets/*.js + assets/*.css)
+# Upload dist/ to S3, configure CloudFront with 404→index.html redirect for SPA routing
 ```
 
-`dist/` 결과물을 S3 등에 업로드하고 SPA 라우팅용 404 → `index.html` 리다이렉트를 설정하면 됩니다.
+## API Access And Usage
 
-## API 접근 및 사용 권한
+- Code in this repository is licensed under MIT.
+- PolarHub API access is governed separately through onboarding and API credential issuance.
+- OTA developers who have completed PolarHub onboarding and received API credentials may use this project to generate and operate their web application with their provisioned middleware and API access.
+- This repository does not grant API access by itself.
 
-- 이 저장소의 코드는 MIT 라이선스로 배포됩니다.
-- PolarHub API 접근 권한은 별도의 온보딩 및 credential 발급 정책으로 관리됩니다.
-- PolarHub 온보딩을 완료하고 API credential을 발급받은 OTA 개발자는, 자신의 미들웨어 및 접근 권한 범위 안에서 이 프로젝트를 사용해 웹 애플리케이션을 생성하고 운영할 수 있습니다.
-- 이 저장소 자체가 API 접근 권한을 부여하지는 않습니다.
+## Architecture
 
-## 아키텍처
+### Agent Skills
 
-### 에이전트 스킬
-
-| 스킬 | 목적 |
+| Skill | Purpose |
 |-------|---------|
-| `/whitelabel-dev` | 3단계 생성 파이프라인을 오케스트레이션 |
-| `/tenant-config` | 테넌트 설정 파일 생성 |
+| `/whitelabel-dev` | Main orchestrator — runs the 3-stage pipeline |
+| `/tenant-config` | Generates tenant configuration files |
 
-전체 흐름은 위의 [동작 방식](#동작-방식) 섹션을 참고하세요.
+See [How It Works](#how-it-works) for the generation pipeline diagram.
 
-## 프로젝트 구조
+## Project Structure
 
 ```
 whitelabel-client/
-├── apps/{tenant-id}/
-│   ├── index.html
-│   ├── vite.config.ts
+├── apps/{tenant-id}/          # Generated Vite + React SPA applications
+│   ├── index.html             # HTML entry point
+│   ├── vite.config.ts         # Vite build configuration
 │   └── src/
-│       ├── main.tsx
-│       ├── App.tsx
-│       ├── app/
-│       ├── components/
-│       ├── lib/api/
-│       └── types/
+│       ├── main.tsx           # React entry (BrowserRouter)
+│       ├── App.tsx            # Route definitions
+│       ├── app/               # Page components
+│       ├── components/        # UI components (layout, search, flight, seat, ...)
+│       ├── lib/api/           # Service layer (23 functions) + middleware client
+│       └── types/             # TypeScript type definitions
 │
-├── tenant/{tenant-id}.yaml
-├── tenant/{tenant-id}/
+├── tenant/{tenant-id}.yaml    # Tenant contract/sample settings
+├── tenant/{tenant-id}/        # Tenant design tokens
 │   └── design-system.json
 │
 ├── .claude/
-│   ├── agents/
-│   ├── skills/
-│   └── assets/
+│   ├── agents/                # Sub-agent definitions
+│   ├── skills/                # Skill definitions + templates + references
+│   └── assets/                # OpenAPI spec, UI component guide, API-UI mapping assets
 │
 ├── scripts/
-│   └── env.sh
+│   └── env.sh                 # Environment variable loader
 │
-└── docs/
+└── docs/                      # Public reference docs
     └── carrier-support-matrix.md
 ```
 
-## API 연동
+## API Integration
 
-프론트엔드는 항공사 API를 직접 호출하지 않습니다. 브라우저에서 `polarhub-service.ts`를 통해 PolarHub NDC Middleware를 호출합니다.
+The frontend does **not** call airline APIs directly. The **service layer** (`polarhub-service.ts`) calls the PolarHub NDC Middleware directly from the browser:
 
 ```
 Browser (React SPA) → Service Layer → PolarHub NDC Middleware → Airlines
+(this repo)           polarhub-service.ts  (whitelabel-middleware)    (NDC XML)
+searchFlights()       middleware-client.ts  /middleware/polarhub/       AY, SQ, ...
+                                            air-shopping
 ```
 
-주요 서비스 함수와 엔드포인트:
+The service layer handles UI data transformation and carrier-specific branching logic. The **PolarHub middleware** handles NDC protocol communication with airlines.
 
-| 서비스 함수 | 미들웨어 엔드포인트 |
+| Service Function | Middleware Endpoint |
 |-----------------|---------------------|
 | `searchFlights()` | `POST /middleware/polarhub/air-shopping` |
 | `getOfferPrice()` | `POST /middleware/polarhub/offer-price` |
@@ -297,46 +325,46 @@ Browser (React SPA) → Service Layer → PolarHub NDC Middleware → Airlines
 | `getSeatAvailability()` | `POST /middleware/polarhub/seat-availability` |
 | `getServiceList()` | `POST /middleware/polarhub/service-list` |
 
-전체 OpenAPI 스펙은 `.claude/assets/whitelabel-middleware.openapi.yaml`에 있습니다.
+Full middleware OpenAPI spec: `.claude/assets/whitelabel-middleware.openapi.yaml`
 
-## 개발
+## Development
 
 ```bash
 cd apps/{tenant-id}
 
-npm run dev
-npm run build
-npm run preview
-npm run lint
-npx tsc --noEmit
+npm run dev          # Vite dev server (http://localhost:5173)
+npm run build        # Vite production build (dist/)
+npm run preview      # Preview production build
+npm run lint         # ESLint
+npx tsc --noEmit     # Type check
 ```
 
-항공사별 API 패턴과 구현 규칙은 [CLAUDE.md](./CLAUDE.md)를 참고하세요.
+For carrier-specific API patterns and implementation details, see [CLAUDE.md](./CLAUDE.md).
 
-### 테스트
+### Testing
 
-이 public seed에는 샘플 테넌트 앱 기준 CI 검증이 포함되어 있습니다.
+This public seed currently ships CI checks for the sample tenant app:
 
 1. `npm run lint`
 2. `npx tsc --noEmit`
 3. `npm run build`
 
-콜드스타트 점검 시에는 DEMO001 앱을 로컬에서 띄워 홈 화면 로딩과 미들웨어 연결 여부를 확인하면 됩니다.
+For a quick cold-start smoke test, run the DEMO001 app locally and verify that the home page loads and can reach your middleware.
 
-## 기여
+## Contributing
 
-기여 전 아래 문서를 먼저 확인해 주세요.
+Contributions are welcome. To get started:
 
-1. [CLAUDE.md](./CLAUDE.md)
-2. [docs/carrier-support-matrix.md](./docs/carrier-support-matrix.md)
-3. [CONTRIBUTING.md](./CONTRIBUTING.md)
-4. `.claude/` 하위 에이전트/스킬 문서
+1. Review [CLAUDE.md](./CLAUDE.md) for coding conventions and API patterns
+2. Check [docs/carrier-support-matrix.md](./docs/carrier-support-matrix.md) for current carrier capability notes
+3. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or proposed change
+4. Each agent/skill has its own instruction file under `.claude/`
 
-## 라이선스
+## License
 
-MIT License. 자세한 내용은 [LICENSE](./LICENSE)를 참고하세요.
+MIT License. See [LICENSE](./LICENSE).
 
-API 접근 권한, credential 발급, 온보딩 정책은 별도로 PolarHub에서 관리합니다.
+API access, credential issuance, and onboarding are governed separately by PolarHub.
 
 ---
 
