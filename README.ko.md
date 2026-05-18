@@ -41,7 +41,7 @@ PolarHub NDC API를 사용하려면 먼저 온보딩을 완료해야 합니다. 
 **셀프 온보딩:**
 
 1. 샌드박스 가입 포털 접속: **https://albus.sandbox.halo-platform.net/sign-up**
-2. 회사 이메일, 테넌트명, 선택사항인 IATA 번호(Production에서만 필수)를 입력합니다.
+2. 회사 이메일, 테넌트명, 선택사항인 IATA 번호를 입력합니다.
 3. 약 10분 이내에 샌드박스 자격증명(Tenant ID + Base64 API Secret)이 발급되며, 미들웨어 저장소에 설정합니다.
 
 > 샌드박스 예약은 항공사 테스트 데이터를 사용합니다 — 발권되지 않으며 IATA 정산에 영향을 주지 않습니다.
