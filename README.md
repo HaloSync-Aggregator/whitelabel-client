@@ -38,11 +38,11 @@ To use PolarHub NDC API, you must complete onboarding first. After onboarding, y
 - **API Secret** (`POLARHUB_API_SECRET`) — Base64-encoded authentication key
 - **Airline access** — list of airlines enabled for your account
 
-**How to onboard (self-serve, ~10 minutes):**
+**How to onboard (self-serve):**
 
 1. Open the sandbox sign-up portal: **https://albus.sandbox.halo-platform.net/sign-up**
-2. Submit your company email, a tenant name (used as `POLARHUB_TENANT_ID`), and an optional IATA number.
-3. Sandbox credentials (`POLARHUB_TENANT_ID` + Base64 `POLARHUB_API_SECRET`) arrive within ~10 minutes.
+2. Submit your company email, a tenant name, and an optional IATA number (required for Production only).
+3. Sandbox credentials (Tenant ID + Base64 API Secret) are issued within ~10 minutes — configure them in the middleware repo.
 
 > Sandbox bookings are backed by airline test data — they are not ticketed and do not touch IATA settlement.
 
