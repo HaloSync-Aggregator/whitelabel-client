@@ -4,7 +4,7 @@
 #              Stage 1: Vite SPA build. Stage 2: Nginx static serving.
 
 # Stage 1: Build - Install deps and build Vite SPA
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
